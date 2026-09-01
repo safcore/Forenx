@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<case id="2024-FX-001">
+  <event type="exfil">employee copied confidential report to USB</event>
+  <event type="auth">password spray detected against VPN</event>
+  <event type="finance">unusual salary change for Project X contractor</event>
+</case>

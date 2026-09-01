@@ -1,0 +1,41 @@
+﻿# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.venv/
+.venv.broken-legacy/
+
+# Node / frontend (if built from this tree)
+node_modules/
+dist/
+
+# Databases
+*.sqlite3
+*.db
+backend/db.sqlite3
+
+# Local evidence, reports, and collected static files
+storage/
+outputs/
+backend/staticfiles/
+
+# Logs and local tooling
+*.log
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

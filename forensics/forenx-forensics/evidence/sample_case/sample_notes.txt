@@ -1,0 +1,9 @@
+Investigator notes - Case 2024-FX-001
+
+An employee was observed accessing confidential financial records.
+The password reset email was forwarded outside the company.
+Transfers mentioning bitcoin and a hardware wallet were found in chat logs.
+Payroll data listed an unusual salary adjustment under Project X.
+USB device activity coincides with a Dropbox sync of confidential.pdf.
+Indicators of malware persistence were noted on the workstation.
+Unicode check: café résumé 机密文件

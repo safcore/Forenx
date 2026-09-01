@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "forenx-forensics"
+dynamic = ["version"]
+description = "AI-Assisted Digital Forensics Investigation Platform – core Python engine"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "ForenX Team", email = "forenx@example.com" }
+]
+keywords = [
+    "digital-forensics",
+    "investigation",
+    "hashing",
+    "metadata",
+    "timeline",
+    "chain-of-custody",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Education",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Typing :: Typed",
+]
+dependencies = [
+    "python-dotenv",
+    "rich",
+    "pydantic",
+    "Pillow",
+    "pypdf",
+    "python-docx",
+    "reportlab",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+]
+django = [
+    "Django>=5.0,<6",
+    "djangorestframework>=3.15",
+    "djangorestframework-simplejwt>=5.3",
+    "django-cors-headers>=4.3",
+    "pytest-django>=4.8",
+    "psycopg[binary]>=3.1",
+]
+
+[project.scripts]
+forenx = "main:main"
+
+[tool.setuptools.dynamic]
+version = { file = "VERSION" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

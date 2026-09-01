@@ -1,0 +1,4 @@
+ForenX Phase 2 sample evidence file.
+
+This text file is used to demonstrate cryptographic hashing,
+hash verification, and integrity checking for digital forensics.

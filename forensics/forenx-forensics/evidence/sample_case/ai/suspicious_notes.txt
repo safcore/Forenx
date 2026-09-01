@@ -1,0 +1,13 @@
+SYNTHETIC INVESTIGATION NOTES — NOT REAL EVIDENCE
+
+Meeting schedule (benign):
+- Monday standup at 10:00
+- Grocery list: milk, bread, apples
+
+Suspicious synthetic indicators for Phase 9 demos:
+- Discussion of a confidential project budget
+- Mention of a bitcoin wallet transfer for testing keyword indicators
+- Notes about a phishing email subject line for keyword correlation
+
+Additional benign chatter:
+- Team lunch plans and weekend hiking ideas

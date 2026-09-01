@@ -1,0 +1,41 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+backend/.venv/
+forensics/forenx-forensics/.venv/
+forensics/forenx-forensics/.venv.broken-legacy/
+
+# Node
+node_modules/
+dist/
+
+# Databases
+*.sqlite3
+*.db
+
+# Local uploaded evidence and generated reports
+storage/
+outputs/
+forensics/forenx-forensics/storage/
+forensics/forenx-forensics/backend/staticfiles/
+
+# IDE / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Cursor / local development logs
+.cursor-runserver-err.log
+.cursor-runserver-out.log

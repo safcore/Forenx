@@ -1,0 +1,21 @@
+{
+  "case_id": "2024-FX-001",
+  "findings": [
+    {
+      "type": "cloud",
+      "keyword": "dropbox",
+      "detail": "employee uploaded confidential files to Dropbox"
+    },
+    {
+      "type": "crypto",
+      "keyword": "wallet",
+      "detail": "hardware wallet seed phrase screenshot recovered"
+    },
+    {
+      "type": "malware",
+      "keyword": "malware",
+      "detail": "persistence via scheduled task"
+    }
+  ],
+  "notes": "Salary anomaly linked to Project X"
+}

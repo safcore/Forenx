@@ -1,0 +1,3 @@
+﻿ForenX Phase 6 synthetic timeline note.
+This file provides filesystem timestamps for demo/timeline reconstruction.
+No real personal data.
