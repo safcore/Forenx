@@ -1,0 +1,21 @@
+# Core Framework & REST API
+Django>=5.2.0,<6.0.0
+djangorestframework>=3.15.0,<4.0.0
+djangorestframework-simplejwt>=5.4.0,<6.0.0
+pydantic>=2.0.0,<3.0.0
+
+# Forensic Analysis & Document/Report Processing
+Pillow>=10.0.0,<13.0.0
+pypdf>=4.0.0,<6.0.0
+python-docx>=1.0.0,<2.0.0
+reportlab>=4.0.0,<5.0.0
+
+# CORS & Security
+django-cors-headers>=4.7.0,<5.0.0
+
+# Configuration & Environment
+python-decouple>=3.8,<4.0
+
+# PostgreSQL Database Drivers
+psycopg2-binary>=2.9.10
+psycopg[binary]>=3.2.0

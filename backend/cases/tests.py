@@ -40,8 +40,14 @@ class CaseOwnershipAPITests(APITestCase):
         self.client.force_authenticate(user=self.user_a)
         response = self.client.get("/api/cases/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        ids = {item["id"] for item in response.data}
+        results = (
+            response.data["results"]
+            if isinstance(response.data, dict) and "results" in response.data
+            else response.data
+        )
+        ids = {item["id"] for item in results}
         self.assertEqual(ids, {self.case_a.id})
+
 
     def test_create_assigns_investigator_to_request_user(self):
         self.client.force_authenticate(user=self.user_a)
@@ -119,3 +125,185 @@ class CaseOwnershipAPITests(APITestCase):
         self.case_a.refresh_from_db()
         self.assertEqual(self.case_a.title, "Updated by A")
         self.assertEqual(self.case_a.investigator_id, self.user_a.id)
+
+
+class CaseFilterAndPaginationAPITests(APITestCase):
+    def setUp(self):
+        self.user_1 = User.objects.create_user(
+            username="investigator_one",
+            email="one@forenx.io",
+            password="Pass12345!",
+        )
+        self.user_2 = User.objects.create_user(
+            username="investigator_two",
+            email="two@forenx.io",
+            password="Pass12345!",
+        )
+
+        # Create user 1 cases in sequential order
+        self.c1 = Case.objects.create(
+            title="Laptop seizure at airport",
+            description="Dell Latitude laptop retrieved from suspect luggage",
+            priority="LOW",
+            status="OPEN",
+            investigator=self.user_1,
+        )
+        self.c2 = Case.objects.create(
+            title="Malware forensic audit",
+            description="Ransomware analysis on finance workstation",
+            priority="HIGH",
+            status="IN_PROGRESS",
+            investigator=self.user_1,
+        )
+        self.c3 = Case.objects.create(
+            title="Server intrusion malware triage",
+            description="Database server breach investigation",
+            priority="CRITICAL",
+            status="OPEN",
+            investigator=self.user_1,
+        )
+        self.c4 = Case.objects.create(
+            title="Old mobile phone dump",
+            description="Closed investigation of prepaid burner phone",
+            priority="MEDIUM",
+            status="CLOSED",
+            investigator=self.user_1,
+        )
+
+        # User 2 case for testing ownership isolation
+        self.u2_case = Case.objects.create(
+            title="Confidential laptop espionage",
+            description="High priority malware case for investigator 2",
+            priority="HIGH",
+            status="OPEN",
+            investigator=self.user_2,
+        )
+
+    def test_newest_first_ordering(self):
+        self.client.force_authenticate(user=self.user_1)
+        response = self.client.get("/api/cases/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        returned_ids = [item["id"] for item in response.data["results"]]
+        self.assertEqual(returned_ids, [self.c4.id, self.c3.id, self.c2.id, self.c1.id])
+
+    def test_pagination_default_structure(self):
+        self.client.force_authenticate(user=self.user_1)
+        response = self.client.get("/api/cases/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("count", response.data)
+        self.assertIn("next", response.data)
+        self.assertIn("previous", response.data)
+        self.assertIn("results", response.data)
+        self.assertEqual(response.data["count"], 4)
+        self.assertEqual(len(response.data["results"]), 4)
+
+    def test_pagination_custom_page_size_and_navigation(self):
+        self.client.force_authenticate(user=self.user_1)
+        # Request page 1 with page_size=2
+        res_p1 = self.client.get("/api/cases/?page_size=2&page=1")
+        self.assertEqual(res_p1.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_p1.data["results"]), 2)
+        self.assertIsNotNone(res_p1.data["next"])
+        self.assertIsNone(res_p1.data["previous"])
+        self.assertEqual(
+            [item["id"] for item in res_p1.data["results"]],
+            [self.c4.id, self.c3.id],
+        )
+
+        # Request page 2 with page_size=2
+        res_p2 = self.client.get("/api/cases/?page_size=2&page=2")
+        self.assertEqual(res_p2.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(res_p2.data["results"]), 2)
+        self.assertIsNone(res_p2.data["next"])
+        self.assertIsNotNone(res_p2.data["previous"])
+        self.assertEqual(
+            [item["id"] for item in res_p2.data["results"]],
+            [self.c2.id, self.c1.id],
+        )
+
+    def test_search_by_title(self):
+        self.client.force_authenticate(user=self.user_1)
+        response = self.client.get("/api/cases/?search=Malware")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in response.data["results"]}
+        self.assertEqual(ids, {self.c2.id, self.c3.id})
+
+    def test_search_by_description(self):
+        self.client.force_authenticate(user=self.user_1)
+        response = self.client.get("/api/cases/?search=Ransomware")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in response.data["results"]}
+        self.assertEqual(ids, {self.c2.id})
+
+    def test_status_filtering(self):
+        self.client.force_authenticate(user=self.user_1)
+        # Uppercase
+        response = self.client.get("/api/cases/?status=OPEN")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in response.data["results"]}
+        self.assertEqual(ids, {self.c1.id, self.c3.id})
+
+        # Case-insensitive
+        response_lower = self.client.get("/api/cases/?status=open")
+        self.assertEqual(response_lower.status_code, status.HTTP_200_OK)
+        ids_lower = {item["id"] for item in response_lower.data["results"]}
+        self.assertEqual(ids_lower, {self.c1.id, self.c3.id})
+
+    def test_priority_filtering(self):
+        self.client.force_authenticate(user=self.user_1)
+        # Uppercase
+        response = self.client.get("/api/cases/?priority=HIGH")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        ids = {item["id"] for item in response.data["results"]}
+        self.assertEqual(ids, {self.c2.id})
+
+        # Case-insensitive
+        response_lower = self.client.get("/api/cases/?priority=high")
+        self.assertEqual(response_lower.status_code, status.HTTP_200_OK)
+        ids_lower = {item["id"] for item in response_lower.data["results"]}
+        self.assertEqual(ids_lower, {self.c2.id})
+
+    def test_combined_search_status_priority_and_pagination(self):
+        self.client.force_authenticate(user=self.user_1)
+        # Search "malware", status OPEN, priority CRITICAL
+        response = self.client.get("/api/cases/?search=malware&status=OPEN&priority=CRITICAL")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["id"], self.c3.id)
+
+    def test_invalid_status_returns_400(self):
+        self.client.force_authenticate(user=self.user_1)
+        response = self.client.get("/api/cases/?status=NOT_VALID")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("status", response.data)
+
+    def test_invalid_priority_returns_400(self):
+        self.client.force_authenticate(user=self.user_1)
+        response = self.client.get("/api/cases/?priority=URGENT")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("priority", response.data)
+
+    def test_search_with_ownership_isolation(self):
+        self.client.force_authenticate(user=self.user_1)
+        # user_2_case has "espionage" in title, user_1 has none
+        response = self.client.get("/api/cases/?search=espionage")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+        self.assertEqual(len(response.data["results"]), 0)
+
+    def test_filtering_with_ownership_isolation(self):
+        self.client.force_authenticate(user=self.user_1)
+        # user_2 has an OPEN HIGH case, user_1 has NO case that is both OPEN and HIGH
+        response = self.client.get("/api/cases/?status=OPEN&priority=HIGH")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["count"], 0)
+
+    def test_pagination_with_ownership_isolation(self):
+        self.client.force_authenticate(user=self.user_1)
+        response = self.client.get("/api/cases/")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        # Total count must only reflect user_1's 4 cases, not user_2's case
+        self.assertEqual(response.data["count"], 4)
+        for item in response.data["results"]:
+            self.assertEqual(item["investigator"], self.user_1.id)
+

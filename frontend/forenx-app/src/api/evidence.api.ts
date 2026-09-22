@@ -4,6 +4,7 @@ import type {
   CustodyEvent,
   Evidence,
   EvidenceCustodyChain,
+  CustodyChainVerificationResult,
   EvidenceHashCompareResult,
   EvidenceIntegrityVerifyResult,
   EvidenceKeywordSearchResult,
@@ -206,6 +207,42 @@ export async function getEvidenceCustody(
   const { data } = await apiClient.get(`/evidence/${evidenceId}/custody/`)
   const payload = unwrapSuccess<Record<string, unknown>>(data)
   return normalizeCustodyChain(stripSensitivePaths(payload) as Record<string, unknown>)
+}
+
+export function normalizeCustodyChainVerificationResult(
+  raw: Record<string, unknown>
+): CustodyChainVerificationResult {
+  return {
+    valid: Boolean(raw.valid),
+    event_count: Number(raw.event_count ?? 0),
+    first_event:
+      raw.first_event && typeof raw.first_event === "object"
+        ? normalizeCustodyEvent(
+            stripSensitivePaths(raw.first_event) as Record<string, unknown>
+          )
+        : null,
+    last_event:
+      raw.last_event && typeof raw.last_event === "object"
+        ? normalizeCustodyEvent(
+            stripSensitivePaths(raw.last_event) as Record<string, unknown>
+          )
+        : null,
+    broken_event_id: raw.broken_event_id ? String(raw.broken_event_id) : null,
+    message: String(raw.message ?? ""),
+    warnings: Array.isArray(raw.warnings) ? raw.warnings.map(String) : [],
+    status: String(raw.status ?? ""),
+  }
+}
+
+/** GET /api/evidence/<uuid>/custody/verify/ — cryptographic chain verification. */
+export async function verifyEvidenceCustodyChain(
+  evidenceId: string
+): Promise<CustodyChainVerificationResult> {
+  const { data } = await apiClient.get(`/evidence/${evidenceId}/custody/verify/`)
+  const payload = unwrapSuccess<Record<string, unknown>>(data)
+  return normalizeCustodyChainVerificationResult(
+    stripSensitivePaths(payload) as Record<string, unknown>
+  )
 }
 
 export function normalizeHashCompareResult(

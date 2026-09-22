@@ -2,8 +2,8 @@ import axios, { type InternalAxiosRequestConfig } from "axios"
 import type { AuthTokens } from "@/types"
 
 export const API_BASE =
-  import.meta.env.VITE_API_URL ||
-  (import.meta.env.DEV ? "http://localhost:8000/api" : "/api")
+  import.meta.env?.VITE_API_URL ||
+  (import.meta.env?.DEV ? "http://localhost:8000/api" : "/api")
 
 export const apiClient = axios.create({
   baseURL: API_BASE,
@@ -20,7 +20,7 @@ apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
       const { access } = JSON.parse(tokens) as AuthTokens
       if (access && access !== "demo-access-token") {
         config.headers.Authorization = `Bearer ${access}`
-      } else if (access === "demo-access-token" && import.meta.env.VITE_DEMO_MODE === "true") {
+      } else if (access === "demo-access-token" && import.meta.env?.VITE_DEMO_MODE === "true") {
         config.headers.Authorization = `Bearer ${access}`
       }
     } catch {
@@ -48,7 +48,10 @@ function isAuthEndpoint(url: string | undefined): boolean {
   if (!url) return false
   return (
     url.includes("/auth/login/") ||
+    url.includes("/token/") ||
+    url.includes("/token/refresh/") ||
     url.includes("/auth/register/") ||
+    url.includes("/register/") ||
     url.includes("/auth/refresh/")
   )
 }
@@ -61,7 +64,7 @@ apiClient.interceptors.response.use(
     }
 
     if (error.response?.status === 401 && !originalRequest._retry) {
-      if (import.meta.env.VITE_DEMO_MODE === "true") {
+      if (import.meta.env?.VITE_DEMO_MODE === "true") {
         return Promise.reject(error)
       }
 
@@ -95,7 +98,7 @@ apiClient.interceptors.response.use(
       try {
         const { refresh } = JSON.parse(tokens) as AuthTokens
         // Use bare axios (not apiClient) so refresh 401 cannot recurse.
-        const { data } = await axios.post(`${API_BASE}/auth/refresh/`, {
+        const { data } = await axios.post(`${API_BASE}/token/refresh/`, {
           refresh,
         })
         const newTokens: AuthTokens = {

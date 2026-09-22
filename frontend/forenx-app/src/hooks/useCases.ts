@@ -6,6 +6,8 @@ import {
   type CreateCasePayload,
 } from "@/api/cases.api"
 
+import { dashboardQueryKey } from "@/hooks/useDashboard"
+
 export const casesQueryKey = ["cases"] as const
 
 export function caseDetailQueryKey(id: string) {
@@ -35,6 +37,7 @@ export function useCreateCaseMutation() {
     mutationFn: (payload: CreateCasePayload) => createCase(payload),
     onSuccess: (created) => {
       void queryClient.invalidateQueries({ queryKey: casesQueryKey })
+      void queryClient.invalidateQueries({ queryKey: dashboardQueryKey() })
       queryClient.setQueryData(caseDetailQueryKey(created.id), created)
     },
   })

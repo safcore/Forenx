@@ -17,6 +17,7 @@ import type { CaseStatus, CasePriority } from "@/types"
 const statusVariant: Record<CaseStatus, "default" | "warning" | "secondary" | "success"> = {
   open: "default",
   active: "warning",
+  in_progress: "warning",
   closed: "success",
   archived: "secondary",
 }

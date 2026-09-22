@@ -1,5 +1,5 @@
 import apiClient from "@/api/client"
-import type { AuthTokens, User, UserRole } from "@/types"
+import type { AuthTokens, RegisterPayload, User, UserRole } from "@/types"
 
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true"
 
@@ -13,16 +13,37 @@ const DEMO_USER: User = {
   created_at: "2025-01-15T00:00:00Z",
 }
 
-/** Map Django `/auth/me/` payload into the frontend User shape. */
+function normalizeRole(rawRole: unknown): UserRole {
+  const r = String(rawRole ?? "").toUpperCase()
+  switch (r) {
+    case "ADMIN":
+    case "ADMINISTRATOR":
+      return "administrator"
+    case "LEAD":
+    case "LEAD_INVESTIGATOR":
+      return "lead_investigator"
+    case "INVESTIGATOR":
+      return "investigator"
+    case "ANALYST":
+      return "analyst"
+    case "AUDITOR":
+      return "auditor"
+    case "VIEWER":
+      return "viewer"
+    default:
+      return "investigator"
+  }
+}
+
+/** Map Django `/profile/` payload directly into the frontend User shape. */
 function normalizeUser(raw: Record<string, unknown>): User {
-  const role = String(raw.role ?? "investigator") as UserRole
   return {
     id: (raw.id as string | number) ?? "",
     email: String(raw.email ?? ""),
     username: raw.username != null ? String(raw.username) : undefined,
     first_name: String(raw.first_name ?? ""),
     last_name: String(raw.last_name ?? ""),
-    role,
+    role: normalizeRole(raw.role),
     avatar: (raw.avatar as string | null | undefined) ?? null,
     department: (raw.department as string | null | undefined) ?? null,
     phone: (raw.phone as string | null | undefined) ?? null,
@@ -34,10 +55,10 @@ function normalizeUser(raw: Record<string, unknown>): User {
 
 /**
  * Backend contract (Django):
- * POST /api/auth/login/
- * POST /api/auth/register/
- * POST /api/auth/refresh/
- * GET  /api/auth/me/
+ * POST /api/auth/login/ (or /api/token/)
+ * POST /api/auth/register/ (or /api/register/)
+ * POST /api/token/refresh/
+ * GET  /api/profile/
  */
 export async function login(
   email: string,
@@ -61,18 +82,38 @@ export async function login(
   throw new Error("Login response did not include access and refresh tokens")
 }
 
-export async function register(payload: {
-  email: string
-  password: string
-  first_name: string
-  last_name: string
-}): Promise<User> {
+export async function register(payload: RegisterPayload): Promise<User> {
   if (DEMO_MODE) {
-    return { ...DEMO_USER, ...payload, id: Date.now() }
+    return {
+      ...DEMO_USER,
+      ...payload,
+      id: Date.now(),
+      role: "investigator",
+      created_at: new Date().toISOString(),
+    }
   }
-  // NOTE (Phase 2): backend RegisterSerializer requires `username`.
-  // Do not wire UI registration until a username strategy is agreed.
-  const { data } = await apiClient.post("/auth/register/", payload)
+
+  // Ensure username is included as required by Django RegisterSerializer.
+  // If the caller provides a username, use it.
+  // Otherwise, derive a clean fallback username from email local-part:
+  // e.g., 'sarah.chen@example.com' -> 'sarah.chen' (sanitized for Django AbstractUser: letters, digits, and @/./+/-/_).
+  const derivedUsername =
+    payload.username?.trim() ||
+    payload.email
+      .split("@")[0]
+      .replace(/[^\w.@+-]/g, "_")
+      .slice(0, 150)
+
+  const requestBody = {
+    username: derivedUsername,
+    email: payload.email.trim().toLowerCase(),
+    password: payload.password,
+    first_name: payload.first_name.trim(),
+    last_name: payload.last_name.trim(),
+    ...(payload.phone ? { phone: payload.phone.trim() } : {}),
+  }
+
+  const { data } = await apiClient.post("/auth/register/", requestBody)
   return normalizeUser(data as Record<string, unknown>)
 }
 
@@ -82,7 +123,7 @@ export async function getProfile(): Promise<User> {
     if (tokens?.access === "demo-access-token") return DEMO_USER
     throw new Error("Unauthorized")
   }
-  const { data } = await apiClient.get("/auth/me/")
+  const { data } = await apiClient.get("/profile/")
   return normalizeUser(data as Record<string, unknown>)
 }
 
@@ -90,7 +131,7 @@ export async function refreshAccessToken(refresh: string): Promise<AuthTokens> {
   if (DEMO_MODE) {
     return { access: "demo-access-token", refresh }
   }
-  const { data } = await apiClient.post("/auth/refresh/", { refresh })
+  const { data } = await apiClient.post("/token/refresh/", { refresh })
   return {
     access: data.access,
     refresh: data.refresh || refresh,

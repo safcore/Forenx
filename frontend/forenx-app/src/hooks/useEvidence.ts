@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   getEvidence,
   getEvidenceCustody,
+  verifyEvidenceCustodyChain,
   listEvidenceForCase,
   listAccessibleEvidence,
   listEvidenceAnalysisRuns,
@@ -127,6 +128,12 @@ export function useVerifyEvidenceHashMutation(evidenceId: string) {
       algorithm: HashAlgorithm
       expectedHash: string
     }) => verifyEvidenceHash(evidenceId, algorithm, expectedHash),
+  })
+}
+
+export function useVerifyEvidenceCustodyChainMutation(evidenceId: string) {
+  return useMutation({
+    mutationFn: () => verifyEvidenceCustodyChain(evidenceId),
   })
 }
 

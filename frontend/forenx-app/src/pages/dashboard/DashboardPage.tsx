@@ -55,6 +55,7 @@ const statusVariant: Record<
 > = {
   open: "default",
   active: "warning",
+  in_progress: "warning",
   closed: "success",
   archived: "secondary",
 }

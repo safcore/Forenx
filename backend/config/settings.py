@@ -10,12 +10,18 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/6.0/ref/settings/
 """
 
+import sys
 from pathlib import Path
-from decouple import config
+from decouple import config, Csv
 from datetime import timedelta
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+# Register forensic engine path deterministically
+FORENSIC_ENGINE_PATH = BASE_DIR.parent / "forensics" / "forenx-forensics"
+if FORENSIC_ENGINE_PATH.is_dir() and str(FORENSIC_ENGINE_PATH) not in sys.path:
+    sys.path.insert(0, str(FORENSIC_ENGINE_PATH))
 
 
 # Quick-start development settings - unsuitable for production
@@ -27,7 +33,7 @@ SECRET_KEY = config('SECRET_KEY')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', cast=bool)
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='127.0.0.1,localhost', cast=Csv())
 
 
 # Application definition
@@ -40,14 +46,17 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
+    'corsheaders',
     'rest_framework',
     'rest_framework_simplejwt',
 
     'apps.accounts',
-    'cases'
+    'cases',
+    'apps.evidence',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -148,3 +157,26 @@ SIMPLE_JWT = {
     'BLACKLIST_AFTER_ROTATION': False,
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = config(
+    'CORS_ALLOWED_ORIGINS',
+    default='http://localhost:5173,http://127.0.0.1:5173',
+    cast=Csv(),
+)
+
+# Pagination
+CASE_PAGE_SIZE = config('CASE_PAGE_SIZE', default=10, cast=int)
+
+# Evidence Storage Configuration
+FORENX_STORAGE_ROOT = Path(config('FORENX_STORAGE_ROOT', default=str(BASE_DIR.parent / 'storage')))
+EVIDENCE_STORAGE_DIR = Path(config('EVIDENCE_STORAGE_DIR', default=str(FORENX_STORAGE_ROOT / 'evidence')))
+REPORT_STORAGE_DIR = Path(config('REPORT_STORAGE_DIR', default=str(FORENX_STORAGE_ROOT / 'reports')))
+FORENX_MAX_UPLOAD_BYTES = config('FORENX_MAX_UPLOAD_BYTES', default=500 * 1024 * 1024, cast=int)
+FORENX_BLOCKED_EXTENSIONS = config(
+    'FORENX_BLOCKED_EXTENSIONS',
+    default='.exe,.bat,.cmd,.sh,.msi',
+    cast=Csv()
+)
+
+

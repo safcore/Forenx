@@ -25,7 +25,7 @@ export interface User {
   is_active?: boolean
 }
 
-export type CaseStatus = "open" | "active" | "closed" | "archived"
+export type CaseStatus = "open" | "active" | "in_progress" | "closed" | "archived"
 
 export type CasePriority = "low" | "medium" | "high" | "critical"
 
@@ -100,6 +100,18 @@ export interface EvidenceCustodyChain {
   evidence_id: string
   events: CustodyEvent[]
   count: number
+}
+
+/** GET /api/evidence/<uuid>/custody/verify/ — cryptographic chain verification. */
+export interface CustodyChainVerificationResult {
+  valid: boolean
+  event_count: number
+  first_event: CustodyEvent | null
+  last_event: CustodyEvent | null
+  broken_event_id: string | null
+  message: string
+  warnings: string[]
+  status: string
 }
 
 export type HashAlgorithm = "md5" | "sha1" | "sha256"
@@ -510,6 +522,15 @@ export interface DashboardStats {
 export interface AuthTokens {
   access: string
   refresh: string
+}
+
+export interface RegisterPayload {
+  username?: string
+  email: string
+  password: string
+  first_name: string
+  last_name: string
+  phone?: string
 }
 
 export interface KeywordSearchRequest {
