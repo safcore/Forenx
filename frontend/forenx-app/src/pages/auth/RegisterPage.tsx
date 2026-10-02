@@ -277,6 +277,10 @@ export default function RegisterPage() {
               Already have an account?{" "}
               <Link
                 to="/login"
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigate("/login")
+                }}
                 className="text-accent hover:text-accent/80 font-medium transition-colors"
               >
                 Sign in

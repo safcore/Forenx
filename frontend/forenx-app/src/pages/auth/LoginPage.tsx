@@ -209,6 +209,10 @@ export default function LoginPage() {
               Don&apos;t have an account?{" "}
               <Link
                 to="/register"
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigate("/register")
+                }}
                 className="text-accent hover:text-accent/80 font-medium transition-colors"
               >
                 Request access
