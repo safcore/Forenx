@@ -19,3 +19,11 @@ python-decouple>=3.8,<4.0
 # PostgreSQL Database Drivers
 psycopg2-binary>=2.9.10
 psycopg[binary]>=3.2.0
+
+# Production Web Server & Static Files
+gunicorn>=21.2.0
+whitenoise>=6.6.0
+
+# Production Database URL Parser
+dj-database-url>=2.1.0
+

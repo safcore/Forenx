@@ -7,6 +7,7 @@ import { DashboardLayout } from "@/components/layouts/DashboardLayout"
 import { motion } from "framer-motion"
 
 const LoginPage = lazy(() => import("@/pages/auth/LoginPage"))
+const RegisterPage = lazy(() => import("@/pages/auth/RegisterPage"))
 const DashboardPage = lazy(() => import("@/pages/dashboard/DashboardPage"))
 const CasesPage = lazy(() => import("@/pages/cases/CasesPage"))
 const CreateCasePage = lazy(() => import("@/pages/cases/CreateCasePage"))
@@ -102,6 +103,18 @@ export default function App() {
                     <LoginPage />
                   </PublicRoute>
                 }
+              />
+              <Route
+                path="/register"
+                element={
+                  <PublicRoute>
+                    <RegisterPage />
+                  </PublicRoute>
+                }
+              />
+              <Route
+                path="/request-access"
+                element={<Navigate to="/register" replace />}
               />
               <Route
                 path="/"
