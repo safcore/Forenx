@@ -3,7 +3,7 @@ import importlib.util
 import shutil
 import tempfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
@@ -825,3 +825,262 @@ class ForensicAnalysisAPITests(APITestCase):
         # User B reports list does NOT include User A's reports
         res_list_b = self.client.get("/api/reports/")
         self.assertEqual(len(res_list_b.data["data"]), 0)
+
+
+class SupabaseStorageIntegrationTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="supabase_investigator",
+            email="sb_inv@forenx.io",
+            password="Pass12345!",
+            role="INVESTIGATOR",
+        )
+        self.case = Case.objects.create(
+            title="Operation Cloudtrail",
+            description="Supabase test case",
+            investigator=self.user,
+        )
+        self.payload = b"SUPABASE CLOUD PERSISTENT EVIDENCE CONTENT 12345"
+        self.expected_md5 = hashlib.md5(self.payload).hexdigest()
+        self.expected_sha1 = hashlib.sha1(self.payload).hexdigest()
+        self.expected_sha256 = hashlib.sha256(self.payload).hexdigest()
+        self._cleanup_storage()
+
+    def _cleanup_storage(self):
+        root = Path(settings.EVIDENCE_STORAGE_DIR)
+        for p in root.glob("*"):
+            if p.is_file():
+                try:
+                    p.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            elif p.is_dir():
+                shutil.rmtree(p, ignore_errors=True)
+
+    def tearDown(self):
+        for ev in Evidence.objects.all():
+            if ev.stored_path and Path(ev.stored_path).exists():
+                try:
+                    Path(ev.stored_path).unlink(missing_ok=True)
+                except Exception:
+                    pass
+        self._cleanup_storage()
+
+    def _upload_file(self, content=None, filename="cloud_disk.raw"):
+        self.client.force_authenticate(user=self.user)
+        payload = content if content is not None else self.payload
+        upload_file = SimpleUploadedFile(
+            name=filename,
+            content=payload,
+            content_type="application/octet-stream",
+        )
+        return self.client.post(
+            f"/api/cases/{self.case.id}/evidence/",
+            {"file": upload_file},
+            format="multipart",
+        )
+
+    def test_configuration_detection_and_fallback(self):
+        from apps.evidence.storage import is_supabase_storage_enabled
+
+        with patch.object(settings, "SUPABASE_URL", None), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", None):
+            self.assertFalse(is_supabase_storage_enabled())
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            self.assertTrue(is_supabase_storage_enabled())
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "local"):
+            self.assertFalse(is_supabase_storage_enabled())
+
+    @patch("apps.evidence.storage.get_supabase_client")
+    def test_upload_with_supabase_storage_enabled(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_get_client.return_value = mock_client
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            response = self._upload_file()
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.data
+        self.assertEqual(data["hashes"]["sha256"], self.expected_sha256)
+
+        evidence = Evidence.objects.get(id=data["id"])
+        mock_client.storage.from_.assert_called_with("evidence")
+        mock_bucket.upload.assert_called_once()
+        call_kwargs = mock_bucket.upload.call_args.kwargs
+        self.assertEqual(call_kwargs["path"], evidence.storage_name)
+
+    @patch("apps.evidence.storage.get_supabase_client")
+    def test_upload_failure_rolls_back_and_cleans_up(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_bucket.upload.side_effect = Exception("Supabase network error")
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_get_client.return_value = mock_client
+
+        initial_count = Evidence.objects.count()
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            response = self._upload_file()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", response.data)
+        self.assertIn("Failed to persist evidence to cloud storage.", str(response.data["file"]))
+        self.assertEqual(Evidence.objects.count(), initial_count)
+
+    @patch("apps.evidence.storage.get_supabase_client")
+    def test_ensure_local_evidence_file_local_vs_remote(self, mock_get_client):
+        from apps.evidence.storage import ensure_local_evidence_file
+
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_get_client.return_value = mock_client
+
+        res = self._upload_file()
+        evidence = Evidence.objects.get(id=res.data["id"])
+        self.assertTrue(Path(evidence.stored_path).is_file())
+
+        # Calling ensure_local_evidence_file when local file exists does not call Supabase
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            path1 = ensure_local_evidence_file(evidence)
+            self.assertEqual(path1, Path(evidence.stored_path))
+            mock_bucket.download.assert_not_called()
+
+            # Simulate ephemeral disk loss: delete local file
+            Path(evidence.stored_path).unlink()
+            self.assertFalse(Path(evidence.stored_path).exists())
+
+            # Configure mock download
+            mock_bucket.download.return_value = self.payload
+
+            # Calling ensure_local_evidence_file retrieves from Supabase
+            path2 = ensure_local_evidence_file(evidence)
+            self.assertTrue(path2.is_file())
+            self.assertEqual(path2.read_bytes(), self.payload)
+            mock_bucket.download.assert_called_once_with(evidence.storage_name)
+
+    @patch("apps.evidence.storage.get_supabase_client")
+    def test_storage_available_serializer_logic(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_get_client.return_value = mock_client
+
+        res = self._upload_file()
+        ev_id = res.data["id"]
+        evidence = Evidence.objects.get(id=ev_id)
+
+        # Remove local file
+        Path(evidence.stored_path).unlink()
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            # Mock object exists in Supabase
+            mock_bucket.exists.return_value = True
+            detail_res1 = self.client.get(f"/api/evidence/{ev_id}/")
+            self.assertTrue(detail_res1.data["storage_available"])
+
+            # Mock object missing in Supabase
+            mock_bucket.exists.return_value = False
+            detail_res2 = self.client.get(f"/api/evidence/{ev_id}/")
+            self.assertFalse(detail_res2.data["storage_available"])
+
+    @patch("apps.evidence.storage.get_supabase_client")
+    def test_integrity_verification_restores_from_cloud(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_bucket.download.return_value = self.payload
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_get_client.return_value = mock_client
+
+        res = self._upload_file()
+        ev_id = res.data["id"]
+        evidence = Evidence.objects.get(id=ev_id)
+
+        # Remove local file to simulate container restart
+        Path(evidence.stored_path).unlink()
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            verify_res = self.client.post(f"/api/evidence/{ev_id}/verify-integrity/")
+            self.assertEqual(verify_res.status_code, status.HTTP_200_OK)
+            self.assertTrue(verify_res.data["overall_match"])
+            mock_bucket.download.assert_called_with(evidence.storage_name)
+
+    @patch("apps.evidence.storage.get_supabase_client")
+    def test_forensic_analysis_restores_from_cloud(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        sample_text = b"CONFIDENTIAL INVESTIGATION SUSPECT INTEL"
+        mock_bucket.download.return_value = sample_text
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_get_client.return_value = mock_client
+
+        res = self._upload_file(content=sample_text, filename="notes.txt")
+        ev_id = res.data["id"]
+        evidence = Evidence.objects.get(id=ev_id)
+
+        Path(evidence.stored_path).unlink()
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            kw_res = self.client.post(
+                f"/api/evidence/{ev_id}/keywords/",
+                {"keywords": ["CONFIDENTIAL"]},
+                format="json",
+            )
+            self.assertEqual(kw_res.status_code, status.HTTP_200_OK)
+            self.assertEqual(kw_res.data["data"]["match_count"], 1)
+
+    @patch("apps.evidence.storage.get_supabase_client")
+    def test_download_failure_returns_not_found(self, mock_get_client):
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_bucket.download.side_effect = Exception("Storage error 404")
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_get_client.return_value = mock_client
+
+        res = self._upload_file()
+        ev_id = res.data["id"]
+        evidence = Evidence.objects.get(id=ev_id)
+
+        Path(evidence.stored_path).unlink()
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            verify_res = self.client.post(f"/api/evidence/{ev_id}/verify-integrity/")
+            self.assertEqual(verify_res.status_code, status.HTTP_404_NOT_FOUND)
+            self.assertIn("Evidence file could not be retrieved from persistent storage.", str(verify_res.data))
+
+    @patch("apps.evidence.storage.get_supabase_client")
+    def test_delete_storage_file_removes_from_supabase(self, mock_get_client):
+        from apps.evidence.storage import delete_storage_file
+
+        mock_client = MagicMock()
+        mock_bucket = MagicMock()
+        mock_client.storage.from_.return_value = mock_bucket
+        mock_get_client.return_value = mock_client
+
+        with patch.object(settings, "SUPABASE_URL", "https://example.supabase.co"), \
+             patch.object(settings, "SUPABASE_SECRET_KEY", "secret_key_123"), \
+             patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
+            delete_storage_file(None, storage_name="test_storage_name.bin")
+            mock_bucket.remove.assert_called_once_with(["test_storage_name.bin"])

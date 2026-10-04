@@ -214,4 +214,12 @@ FORENX_BLOCKED_EXTENSIONS = config(
     cast=Csv()
 )
 
+# Supabase Storage Configuration
+SUPABASE_URL = config('SUPABASE_URL', default=None)
+SUPABASE_SECRET_KEY = config('SUPABASE_SECRET_KEY', default=None)
+SUPABASE_STORAGE_BUCKET = config('SUPABASE_STORAGE_BUCKET', default='evidence')
+FORENX_STORAGE_BACKEND = config(
+    'FORENX_STORAGE_BACKEND',
+    default='supabase' if (SUPABASE_URL and SUPABASE_SECRET_KEY) else 'local',
+)
 

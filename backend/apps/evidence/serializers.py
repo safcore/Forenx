@@ -34,11 +34,10 @@ class EvidenceSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
     def get_storage_available(self, obj) -> bool:
-        """Check whether the evidence file physically exists on the filesystem."""
-        try:
-            return Path(obj.stored_path).is_file()
-        except Exception:
-            return False
+        """Check whether the evidence file exists locally or in Supabase Storage."""
+        from .storage import is_storage_available
+
+        return is_storage_available(obj)
 
 
 class EvidenceUploadSerializer(serializers.Serializer):

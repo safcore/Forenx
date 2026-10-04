@@ -27,3 +27,6 @@ whitenoise>=6.6.0
 # Production Database URL Parser
 dj-database-url>=2.1.0
 
+# Cloud Object Storage
+supabase>=2.0.0
+

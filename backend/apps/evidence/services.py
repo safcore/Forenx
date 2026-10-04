@@ -30,7 +30,13 @@ from .models import (
     ReportRecord,
     ReportType,
 )
-from .storage import delete_storage_file, store_uploaded_file
+from .storage import (
+    delete_storage_file,
+    ensure_local_evidence_file,
+    is_supabase_storage_enabled,
+    store_uploaded_file,
+    upload_evidence_to_supabase,
+)
 
 _SENSITIVE_PATH_KEYS = frozenset(
     {
@@ -188,6 +194,11 @@ def acquire_evidence(*, case, request, uploaded_file) -> dict[str, Any]:
             "mime_type": mime_type,
         }
 
+        if is_supabase_storage_enabled():
+            upload_evidence_to_supabase(
+                stored_path, storage_name, mime_type=mime_type
+            )
+
         now = dj_timezone.now()
         evidence = Evidence.objects.create(
             case=case,
@@ -232,7 +243,7 @@ def acquire_evidence(*, case, request, uploaded_file) -> dict[str, Any]:
         }
     except Exception:
         if stored_path is not None:
-            delete_storage_file(stored_path)
+            delete_storage_file(stored_path, storage_name=storage_name)
         raise
 
 
@@ -262,9 +273,7 @@ def verify_evidence_hash(
 
 def verify_evidence_integrity(*, evidence: Evidence, request) -> dict[str, Any]:
     """Recalculate live digests from stored file and verify against baseline."""
-    file_path = Path(evidence.stored_path)
-    if not file_path.is_file():
-        raise NotFound("Evidence file is missing from physical storage.")
+    file_path = ensure_local_evidence_file(evidence)
 
     live_hashes = generate_all_hashes(file_path)
     md5_match = bool(live_hashes.get("md5") == evidence.md5)
@@ -455,9 +464,7 @@ def _metadata_categories(result: Any) -> list[str]:
 
 def run_metadata_analysis(*, evidence: Evidence, request) -> dict[str, Any]:
     """Execute deep metadata extraction, persist to AnalysisRun, and log custody."""
-    path = Path(evidence.stored_path)
-    if not path.is_file():
-        raise NotFound("Evidence file is currently unavailable for metadata analysis.")
+    path = ensure_local_evidence_file(evidence)
 
     run = start_analysis_run(
         evidence=evidence, user=request.user, analysis_type=AnalysisType.METADATA
@@ -576,9 +583,7 @@ def run_keyword_analysis(
             except re.error as exc:
                 raise ValidationError({"keywords": f"Invalid regular expression pattern '{kw}': {exc}"})
 
-    path = Path(evidence.stored_path)
-    if not path.is_file():
-        raise NotFound("Evidence file is currently unavailable for keyword search.")
+    path = ensure_local_evidence_file(evidence)
 
     run = start_analysis_run(
         evidence=evidence, user=request.user, analysis_type=AnalysisType.KEYWORD
@@ -668,9 +673,7 @@ def _limit_browser_artifact_lists(payload: dict[str, Any]) -> dict[str, Any]:
 
 def run_browser_analysis(*, evidence: Evidence, request) -> dict[str, Any]:
     """Execute offline browser profile analysis (history, downloads, cookies metadata)."""
-    path = Path(evidence.stored_path)
-    if not path.exists():
-        raise NotFound("Evidence file is currently unavailable for browser analysis.")
+    path = ensure_local_evidence_file(evidence)
 
     profile_dir = _resolve_browser_profile_dir(path)
     run = start_analysis_run(
@@ -780,9 +783,7 @@ def _limit_timeline_events(payload: dict[str, Any]) -> dict[str, Any]:
 
 def run_timeline_analysis(*, evidence: Evidence, request) -> dict[str, Any]:
     """Reconstruct chronological timeline from filesystem, metadata, and browser."""
-    path = Path(evidence.stored_path)
-    if not path.is_file():
-        raise NotFound("Evidence file is currently unavailable for timeline analysis.")
+    path = ensure_local_evidence_file(evidence)
 
     run = start_analysis_run(
         evidence=evidence, user=request.user, analysis_type=AnalysisType.TIMELINE
