@@ -14,6 +14,7 @@ import {
   Fingerprint,
   Link2,
   User,
+  Users,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useAuth } from "@/contexts/AuthContext"
@@ -49,6 +50,17 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
     navigate("/login", { replace: true })
   }
 
+  const isAdmin =
+    user?.role?.toUpperCase() === "ADMIN" ||
+    user?.role?.toLowerCase() === "administrator"
+
+  const displayedNavItems = isAdmin
+    ? [
+        ...navItems,
+        { to: "/admin/users", icon: Users, label: "User Management" },
+      ]
+    : navItems
+
   return (
     <motion.aside
       initial={false}
@@ -78,7 +90,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
       </div>
 
       <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {navItems.map((item) => {
+        {displayedNavItems.map((item) => {
           const isActive = location.pathname.startsWith(item.to)
           return (
             <NavLink

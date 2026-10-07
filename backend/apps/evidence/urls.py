@@ -3,6 +3,7 @@ from django.urls import path
 from .views import (
     CaseEvidenceCollectionView,
     CustodyListView,
+    CustodyGlobalVerifyView,
     EvidenceAIView,
     EvidenceAnalysisHistoryView,
     EvidenceBrowserAnalyzeView,
@@ -36,6 +37,7 @@ urlpatterns = [
     path("evidence/<uuid:id>/custody/verify/", EvidenceCustodyVerifyView.as_view(), name="evidence-custody-verify"),
     path("evidence/<uuid:id>/verify-hash/", EvidenceVerifyHashView.as_view(), name="evidence-verify-hash"),
     path("evidence/<uuid:id>/verify-integrity/", EvidenceVerifyIntegrityView.as_view(), name="evidence-verify-integrity"),
+    path("custody/verify/", CustodyGlobalVerifyView.as_view(), name="custody-global-verify"),
     path("custody/", CustodyListView.as_view(), name="custody-list"),
 
     # Metadata analysis

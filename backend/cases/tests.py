@@ -307,3 +307,55 @@ class CaseFilterAndPaginationAPITests(APITestCase):
         for item in response.data["results"]:
             self.assertEqual(item["investigator"], self.user_1.id)
 
+
+class CaseInvestigatorAndCloseAPITests(APITestCase):
+    def setUp(self):
+        self.investigator = User.objects.create_user(
+            username="det_holmes",
+            first_name="Sherlock",
+            last_name="Holmes",
+            email="holmes@agency.gov",
+            password="SherlockPass123!",
+            role="INVESTIGATOR",
+        )
+        self.other_user = User.objects.create_user(
+            username="det_watson",
+            email="watson@agency.gov",
+            password="WatsonPass123!",
+            role="INVESTIGATOR",
+        )
+        self.case = Case.objects.create(
+            title="The Red-Headed League",
+            description="Bank tunnel investigation",
+            investigator=self.investigator,
+            status="OPEN",
+            priority="HIGH",
+        )
+
+    def test_case_detail_and_list_include_investigator_name(self):
+        self.client.force_authenticate(user=self.investigator)
+        res = self.client.get(f"/api/cases/{self.case.id}/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["investigator_username"], "det_holmes")
+        self.assertEqual(res.data["investigator_name"], "Sherlock Holmes")
+
+        list_res = self.client.get("/api/cases/")
+        self.assertEqual(list_res.status_code, status.HTTP_200_OK)
+        first_case = list_res.data["results"][0]
+        self.assertEqual(first_case["investigator_username"], "det_holmes")
+        self.assertEqual(first_case["investigator_name"], "Sherlock Holmes")
+
+    def test_close_case_endpoint_transitions_status(self):
+        self.client.force_authenticate(user=self.investigator)
+        close_res = self.client.post(f"/api/cases/{self.case.id}/close/")
+        self.assertEqual(close_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(close_res.data["status"], "CLOSED")
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "CLOSED")
+
+    def test_other_user_cannot_close_case(self):
+        self.client.force_authenticate(user=self.other_user)
+        close_res = self.client.post(f"/api/cases/{self.case.id}/close/")
+        self.assertEqual(close_res.status_code, status.HTTP_404_NOT_FOUND)
+        self.case.refresh_from_db()
+        self.assertEqual(self.case.status, "OPEN")

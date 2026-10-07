@@ -65,8 +65,10 @@ export default function RegisterPage() {
         department: data.department?.trim() || undefined,
       })
 
-      toast.success("Account created successfully! Please sign in.")
-      navigate("/login")
+      toast.success(
+        "Account created! Please check your email for the verification link."
+      )
+      navigate("/verify-email")
     } catch (err) {
       const msg = getErrorMessage(err)
       setApiError(msg)

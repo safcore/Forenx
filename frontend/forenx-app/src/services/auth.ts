@@ -1,5 +1,11 @@
 import apiClient from "@/api/client"
-import type { AuthTokens, RegisterPayload, User, UserRole } from "@/types"
+import type {
+  AdminUser,
+  AuthTokens,
+  RegisterPayload,
+  User,
+  UserRole,
+} from "@/types"
 
 const DEMO_MODE = import.meta.env.VITE_DEMO_MODE === "true"
 
@@ -50,6 +56,10 @@ function normalizeUser(raw: Record<string, unknown>): User {
     created_at: String(raw.created_at ?? raw.date_joined ?? ""),
     last_login: (raw.last_login as string | null | undefined) ?? null,
     is_active: typeof raw.is_active === "boolean" ? raw.is_active : undefined,
+    is_email_verified:
+      typeof raw.is_email_verified === "boolean"
+        ? raw.is_email_verified
+        : undefined,
   }
 }
 
@@ -158,4 +168,31 @@ export function getStoredTokens(): AuthTokens | null {
 
 export function isDemoMode(): boolean {
   return DEMO_MODE
+}
+
+export async function verifyEmail(
+  token: string
+): Promise<{ message: string; email?: string }> {
+  const { data } = await apiClient.post("/auth/verify-email/", { token })
+  return data
+}
+
+export async function resendVerification(
+  email: string
+): Promise<{ message: string }> {
+  const { data } = await apiClient.post("/auth/resend-verification/", { email })
+  return data
+}
+
+export async function listAdminUsers(): Promise<AdminUser[]> {
+  const { data } = await apiClient.get("/admin/users/")
+  return Array.isArray(data) ? data : (data?.results ?? [])
+}
+
+export async function updateAdminUser(
+  id: number | string,
+  payload: { role?: string; is_active?: boolean; is_email_verified?: boolean }
+): Promise<AdminUser> {
+  const { data } = await apiClient.patch(`/admin/users/${id}/`, payload)
+  return data
 }

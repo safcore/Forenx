@@ -7,6 +7,8 @@ export type UserRole =
   | "analyst"
   | "auditor"
   | "viewer"
+  | "ADMIN"
+  | "INVESTIGATOR"
 
 export interface User {
   /** Backend uses UUID strings; demo mode may use numeric ids. */
@@ -23,6 +25,36 @@ export interface User {
   created_at: string
   last_login?: string | null
   is_active?: boolean
+  is_email_verified?: boolean
+}
+
+export interface AdminUser {
+  id: number | string
+  username: string
+  email: string
+  first_name: string
+  last_name: string
+  phone?: string | null
+  role: string
+  is_active: boolean
+  is_email_verified: boolean
+  created_at: string
+  date_joined?: string
+  last_login?: string | null
+}
+
+export interface CustodyGlobalVerification {
+  valid: boolean
+  status: "VALID" | "INVALID"
+  message: string
+  event_count: number
+  verified_chains: number
+  broken_chains: Array<{
+    evidence_id: string
+    original_filename?: string
+    case_id?: string | number
+    details?: Record<string, unknown>
+  }>
 }
 
 export type CaseStatus = "open" | "active" | "in_progress" | "closed" | "archived"

@@ -122,7 +122,12 @@ export function normalizeCase(raw: Record<string, unknown>): Case {
     title: String(raw.title ?? ""),
     description: String(raw.description ?? ""),
     investigator: String(raw.investigator ?? ""),
-    investigator_username: String(raw.investigator_username ?? ""),
+    investigator_username: String(
+      raw.investigator_username ||
+        raw.investigator_name ||
+        raw.investigator ||
+        ""
+    ),
     member_ids: memberIds,
     priority: toFrontendPriority(raw.priority),
     status: toFrontendStatus(raw.status),
@@ -295,6 +300,12 @@ export async function updateCase(
   }
 
   const { data } = await apiClient.patch(`/cases/${id}/`, body)
+  return normalizeCase(data as Record<string, unknown>)
+}
+
+/** POST /api/cases/<id>/close/ — transition case status to CLOSED. */
+export async function closeCase(id: string): Promise<Case> {
+  const { data } = await apiClient.post(`/cases/${id}/close/`)
   return normalizeCase(data as Record<string, unknown>)
 }
 

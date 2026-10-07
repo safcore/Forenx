@@ -1,16 +1,24 @@
+import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { AlertCircle, Link2, Loader2 } from "lucide-react"
+import {
+  AlertCircle,
+  AlertTriangle,
+  Link2,
+  Loader2,
+  ShieldCheck,
+  X,
+} from "lucide-react"
 import { PageHeader } from "@/components/common/PageHeader"
 import { EmptyState } from "@/components/common/EmptyState"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import {
-  formatCustodyAction,
-} from "@/components/forensic/CustodyTimeline"
+import { formatCustodyAction } from "@/components/forensic/CustodyTimeline"
 import { useCustodyListQuery } from "@/hooks/useCustody"
+import { verifyCustodyChain } from "@/api/custody.api"
 import { getErrorMessage } from "@/api/client"
 import { formatDateTime } from "@/lib/utils"
+import { toast } from "react-hot-toast"
 
 function actionVariant(
   action: string
@@ -23,17 +31,118 @@ function actionVariant(
   return "secondary"
 }
 
+interface VerificationResultState {
+  valid: boolean
+  status: "VALID" | "INVALID"
+  message: string
+  event_count: number
+  verified_chains: number
+  broken_chains: Array<Record<string, unknown>>
+}
+
 export default function CustodyPage() {
   const { caseId } = useParams<{ caseId?: string }>()
   const { data, isLoading, isError, error, refetch, isFetching } =
     useCustodyListQuery(caseId)
+
+  const [isVerifying, setIsVerifying] = useState(false)
+  const [verifyResult, setVerifyResult] = useState<VerificationResultState | null>(null)
+
+  const handleVerify = async () => {
+    setIsVerifying(true)
+    try {
+      const result = await verifyCustodyChain(caseId)
+      setVerifyResult(result)
+      if (result.valid) {
+        toast.success("Custody chain verification passed: VALID")
+      } else {
+        toast.error("Custody chain verification failed: INVALID")
+      }
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setIsVerifying(false)
+    }
+  }
 
   return (
     <div className="space-y-6">
       <PageHeader
         title="Chain of Custody"
         description="Read-only ledger of recorded handling events. Opening or refreshing this page does not create custody events."
+        actions={
+          <Button
+            variant="default"
+            size="sm"
+            onClick={handleVerify}
+            disabled={isVerifying}
+            className="gap-2"
+          >
+            {isVerifying ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Verifying Chain…
+              </>
+            ) : (
+              <>
+                <ShieldCheck className="h-4 w-4" />
+                Verify Custody Chain
+              </>
+            )}
+          </Button>
+        }
       />
+
+      {/* Verification Result Banner */}
+      {verifyResult && (
+        <div
+          className={`relative rounded-xl border p-4 transition-all ${
+            verifyResult.valid
+              ? "border-success/30 bg-success/10 text-white"
+              : "border-danger/30 bg-danger/10 text-white"
+          }`}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex items-start gap-3">
+              {verifyResult.valid ? (
+                <ShieldCheck className="h-5 w-5 text-success shrink-0 mt-0.5" />
+              ) : (
+                <AlertTriangle className="h-5 w-5 text-danger shrink-0 mt-0.5" />
+              )}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold tracking-wide">
+                    {verifyResult.status}:
+                  </span>
+                  <span
+                    className={
+                      verifyResult.valid ? "text-success font-medium" : "text-danger font-medium"
+                    }
+                  >
+                    {verifyResult.message}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-text-secondary">
+                  {verifyResult.valid
+                    ? `Cryptographic chain intact. Verified ${verifyResult.verified_chains} evidence ledger${
+                        verifyResult.verified_chains === 1 ? "" : "s"
+                      } across ${verifyResult.event_count} recorded custody event${
+                        verifyResult.event_count === 1 ? "" : "s"
+                      }.`
+                    : `Chain integrity failure detected in ${verifyResult.broken_chains.length} evidence ledger(s). Cryptographic hash linkage mismatch.`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setVerifyResult(null)}
+              className="text-text-muted hover:text-white transition-colors"
+              aria-label="Dismiss banner"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="flex min-h-[30vh] items-center justify-center gap-2 text-sm text-text-muted">

@@ -1,12 +1,16 @@
 import { PageHeader } from "@/components/common/PageHeader"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { useAuth } from "@/contexts/AuthContext"
+import { useTheme } from "@/contexts/ThemeContext"
 import { isDemoMode } from "@/services/auth"
 import { API_BASE } from "@/api/client"
+import { Moon, Sun } from "lucide-react"
 
 export default function SettingsPage() {
   const { user } = useAuth()
+  const { theme, setTheme } = useTheme()
   const demo = isDemoMode()
 
   return (
@@ -27,9 +31,13 @@ export default function SettingsPage() {
               <span className="text-white">{user?.email ?? "—"}</span>
             </div>
             <div className="flex justify-between">
+              <span className="text-text-secondary">Username</span>
+              <span className="text-white">{user?.username ?? "—"}</span>
+            </div>
+            <div className="flex justify-between">
               <span className="text-text-secondary">Role</span>
               <span className="capitalize text-white">
-                {user?.role?.replace("_", " ") ?? "—"}
+                {user?.role?.replace(/_/g, " ") ?? "—"}
               </span>
             </div>
           </CardContent>
@@ -45,14 +53,17 @@ export default function SettingsPage() {
               <Badge variant="success">Authenticated</Badge>
             </div>
             <div className="flex items-center justify-between">
+              <span className="text-text-secondary">Inactivity Timeout</span>
+              <Badge variant="default">30 Minutes</Badge>
+            </div>
+            <div className="flex items-center justify-between">
               <span className="text-text-secondary">Auth mode</span>
               <Badge variant={demo ? "warning" : "default"}>
                 {demo ? "Demo mode" : "JWT (backend)"}
               </Badge>
             </div>
             <p className="text-xs text-text-muted">
-              JWT tokens are never displayed in the UI. Logout clears local
-              session storage.
+              JWT tokens are secured in client storage. Sessions automatically expire after 30 minutes of inactivity.
             </p>
           </CardContent>
         </Card>
@@ -61,11 +72,30 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="text-base">Appearance</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <p className="text-sm text-text-secondary">
-              Dark theme is the default for forensic workstations. Light theme
-              is not enabled in this build.
+              Workstation visual theme. Switch between dark mode and light mode across all views.
             </p>
+            <div className="flex gap-3">
+              <Button
+                variant={theme === "dark" ? "default" : "secondary"}
+                size="sm"
+                className="gap-2"
+                onClick={() => setTheme("dark")}
+              >
+                <Moon className="h-4 w-4" />
+                Dark Theme
+              </Button>
+              <Button
+                variant={theme === "light" ? "default" : "secondary"}
+                size="sm"
+                className="gap-2"
+                onClick={() => setTheme("light")}
+              >
+                <Sun className="h-4 w-4" />
+                Light Theme
+              </Button>
+            </div>
           </CardContent>
         </Card>
 

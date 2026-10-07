@@ -1084,3 +1084,24 @@ class SupabaseStorageIntegrationTests(APITestCase):
              patch.object(settings, "FORENX_STORAGE_BACKEND", "supabase"):
             delete_storage_file(None, storage_name="test_storage_name.bin")
             mock_bucket.remove.assert_called_once_with(["test_storage_name.bin"])
+
+
+class CustodyGlobalVerifyAPITests(SupabaseStorageIntegrationTests):
+    def test_global_custody_verify_returns_valid_for_evidence(self):
+        res = self._upload_file(filename="custody_test.txt")
+        self.assertEqual(res.status_code, status.HTTP_201_CREATED)
+
+        # GET /api/custody/verify/
+        verify_res = self.client.get("/api/custody/verify/")
+        self.assertEqual(verify_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(verify_res.data["success"])
+        data = verify_res.data["data"]
+        self.assertTrue(data["valid"])
+        self.assertEqual(data["status"], "VALID")
+        self.assertIn("intact", data["message"].lower())
+        self.assertGreater(data["event_count"], 0)
+
+        # POST /api/custody/verify/ with case_id filter
+        post_res = self.client.post("/api/custody/verify/", {"case_id": self.case.id}, format="json")
+        self.assertEqual(post_res.status_code, status.HTTP_200_OK)
+        self.assertTrue(post_res.data["data"]["valid"])

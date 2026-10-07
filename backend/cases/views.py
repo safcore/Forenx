@@ -1,7 +1,10 @@
-from rest_framework import generics
+from django.shortcuts import get_object_or_404
+from rest_framework import generics, status
 from rest_framework.exceptions import ValidationError
-from rest_framework.filters import SearchFilter, OrderingFilter
+from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from .models import Case
 from .pagination import CasePagination
@@ -18,8 +21,11 @@ class CaseListCreateView(generics.ListCreateAPIView):
     ordering = ["-created_at"]
 
     def get_queryset(self):
-        # Strict ownership isolation: users only access their own cases
-        queryset = Case.objects.filter(investigator=self.request.user).order_by("-created_at")
+        # Admin can view all cases if permitted; investigators strictly view their own
+        if getattr(self.request.user, "role", None) == "ADMIN" or self.request.user.is_superuser:
+            queryset = Case.objects.all().order_by("-created_at")
+        else:
+            queryset = Case.objects.filter(investigator=self.request.user).order_by("-created_at")
 
         status_param = self.request.query_params.get("status")
         if status_param:
@@ -52,4 +58,27 @@ class CaseDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Case.objects.filter(investigator=self.request.user)
+        if getattr(self.request.user, "role", None) == "ADMIN" or self.request.user.is_superuser:
+            return Case.objects.all()
+        return Case.objects.filter(investigator=self.request.user)
+
+
+class CaseCloseView(APIView):
+    """
+    POST /api/cases/<int:pk>/close/
+    Performs backend-enforced state transition OPEN -> CLOSED.
+    Preserves all forensic evidence, hashes, reports, and custody records intact.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request, pk: int):
+        if getattr(request.user, "role", None) == "ADMIN" or request.user.is_superuser:
+            case = get_object_or_404(Case, pk=pk)
+        else:
+            case = get_object_or_404(Case, pk=pk, investigator=request.user)
+
+        case.status = "CLOSED"
+        case.save(update_fields=["status", "updated_at"])
+        serializer = CaseSerializer(case)
+        return Response(serializer.data, status=status.HTTP_200_OK)

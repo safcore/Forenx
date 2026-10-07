@@ -68,3 +68,18 @@ export async function listCustodyEvents(
     normalizeCustodyListItem(item as Record<string, unknown>)
   )
 }
+
+/** GET /api/custody/verify/ — verify cryptographic custody chain integrity. */
+export async function verifyCustodyChain(caseId?: string): Promise<{
+  valid: boolean
+  status: "VALID" | "INVALID"
+  message: string
+  event_count: number
+  verified_chains: number
+  broken_chains: Array<Record<string, unknown>>
+}> {
+  const { data } = await apiClient.get("/custody/verify/", {
+    params: caseId ? { case_id: caseId } : undefined,
+  })
+  return unwrapSuccess(data)
+}

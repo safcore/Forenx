@@ -25,6 +25,17 @@
   --radius-2xl: 1.5rem;
 }
 
+html.light {
+  --color-background: #0D1117;
+  --color-card: #161B22;
+  --color-card-hover: #1F242C;
+  --color-border: rgba(255, 255, 255, 0.12);
+  --color-border-hover: rgba(255, 255, 255, 0.22);
+  --color-text: #F0F6FC;
+  --color-text-secondary: #8B949E;
+  --color-text-muted: #6E7681;
+}
+
 @layer base {
   * {
     border-color: var(--color-border);

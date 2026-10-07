@@ -4,9 +4,10 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { motion } from "framer-motion"
-import { Shield, Eye, EyeOff, Loader2, ArrowRight } from "lucide-react"
+import { Shield, Eye, EyeOff, Loader2, ArrowRight, AlertCircle, Mail } from "lucide-react"
 import { toast } from "react-hot-toast"
 import { useAuth } from "@/contexts/AuthContext"
+import { resendVerification } from "@/services/auth"
 import { getErrorMessage } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -23,6 +24,8 @@ export default function LoginPage() {
   const navigate = useNavigate()
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null)
+  const [resending, setResending] = useState(false)
 
   const {
     register,
@@ -34,12 +37,20 @@ export default function LoginPage() {
 
   const onSubmit = async (data: FormData) => {
     setIsLoading(true)
+    setUnverifiedEmail(null)
     try {
       await login(data.email, data.password)
       toast.success("Welcome back")
       navigate("/dashboard")
     } catch (err) {
-      toast.error(getErrorMessage(err))
+      const msg = getErrorMessage(err)
+      if (
+        msg.toLowerCase().includes("not verified") ||
+        msg.toLowerCase().includes("email_not_verified")
+      ) {
+        setUnverifiedEmail(data.email)
+      }
+      toast.error(msg)
     } finally {
       setIsLoading(false)
     }
@@ -187,6 +198,48 @@ export default function LoginPage() {
                   Forgot password?
                 </Link>
               </div>
+
+              {unverifiedEmail && (
+                <div className="rounded-xl border border-warning/20 bg-warning/10 p-4 space-y-2">
+                  <div className="flex items-start gap-2.5 text-warning text-xs">
+                    <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="font-medium text-white">Email Verification Required</p>
+                      <p className="text-text-secondary mt-0.5">
+                        Please verify your email address before signing in.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 pt-1">
+                    <button
+                      type="button"
+                      disabled={resending}
+                      onClick={async () => {
+                        setResending(true)
+                        try {
+                          await resendVerification(unverifiedEmail)
+                          toast.success("Verification link sent to your email.")
+                        } catch (err) {
+                          toast.error(getErrorMessage(err))
+                        } finally {
+                          setResending(false)
+                        }
+                      }}
+                      className="text-xs text-accent hover:underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <Mail className="h-3 w-3" />
+                      {resending ? "Sending link…" : "Resend verification link"}
+                    </button>
+                    <span className="text-white/20">•</span>
+                    <Link
+                      to="/verify-email"
+                      className="text-xs text-text-muted hover:text-white transition-colors"
+                    >
+                      Enter token
+                    </Link>
+                  </div>
+                </div>
+              )}
 
               <Button
                 type="submit"

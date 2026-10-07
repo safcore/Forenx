@@ -173,12 +173,102 @@ class CustodyListView(APIView):
 
     def get(self, request):
         case_id = request.query_params.get("case_id")
-        qs = CustodyEventRecord.objects.filter(case__investigator=request.user)
+        if getattr(request.user, "role", None) == "ADMIN" or request.user.is_superuser:
+            qs = CustodyEventRecord.objects.all()
+        else:
+            qs = CustodyEventRecord.objects.filter(case__investigator=request.user)
+
         if case_id:
             qs = qs.filter(case_id=case_id)
         qs = qs.select_related("case", "evidence").order_by("timestamp", "created_at")
         serializer = CustodyEventSerializer(qs, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class CustodyGlobalVerifyView(APIView):
+    """
+    GET or POST /api/custody/verify/
+    Verifies cryptographic hash chains across accessible evidence items.
+    Reuses existing backend verification logic via hydrate_custody_service.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def _verify(self, request):
+        case_id = request.query_params.get("case_id")
+        if not case_id and hasattr(request, "data") and isinstance(request.data, dict):
+            case_id = request.data.get("case_id")
+
+        if getattr(request.user, "role", None) == "ADMIN" or request.user.is_superuser:
+            evidence_qs = Evidence.objects.all()
+        else:
+            evidence_qs = Evidence.objects.filter(case__investigator=request.user)
+
+        if case_id:
+            evidence_qs = evidence_qs.filter(case_id=case_id)
+
+        evidence_list = list(evidence_qs)
+        total_events = 0
+        total_chains = 0
+        broken_chains = []
+
+        for evidence in evidence_list:
+            service = hydrate_custody_service(evidence)
+            verification = service.verify_chain(str(evidence.id))
+            ver_dump = _schema_dump(verification)
+            event_count = (
+                ver_dump.get("event_count", 0)
+                if isinstance(ver_dump, dict)
+                else getattr(verification, "event_count", 0)
+            )
+            valid = (
+                ver_dump.get("valid", False)
+                if isinstance(ver_dump, dict)
+                else getattr(verification, "valid", False)
+            )
+
+            total_events += event_count
+            total_chains += 1
+
+            if not valid:
+                broken_chains.append(
+                    {
+                        "evidence_id": str(evidence.id),
+                        "original_filename": evidence.original_filename,
+                        "case_id": evidence.case_id,
+                        "details": ver_dump,
+                    }
+                )
+
+        is_valid = len(broken_chains) == 0
+        status_label = "VALID" if is_valid else "INVALID"
+        message = (
+            "Cryptographic chain intact"
+            if is_valid
+            else "Chain integrity failure"
+        )
+
+        return Response(
+            {
+                "success": True,
+                "data": {
+                    "valid": is_valid,
+                    "status": status_label,
+                    "message": message,
+                    "event_count": total_events,
+                    "verified_chains": total_chains,
+                    "broken_chains": broken_chains,
+                },
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    def get(self, request):
+        return self._verify(request)
+
+    def post(self, request):
+        return self._verify(request)
+
 
 
 # ============================================================================
