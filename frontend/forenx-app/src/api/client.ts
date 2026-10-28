@@ -14,6 +14,9 @@ export const apiClient = axios.create({
 })
 
 apiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+  if (typeof FormData !== "undefined" && config.data instanceof FormData) {
+    delete config.headers["Content-Type"]
+  }
   const tokens = localStorage.getItem("forenx_tokens")
   if (tokens) {
     try {

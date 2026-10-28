@@ -252,6 +252,81 @@ class EvidenceManagementAPITests(APITestCase):
         root = Path(settings.EVIDENCE_STORAGE_DIR).resolve()
         self.assertTrue(Path(evidence.stored_path).resolve().is_relative_to(root))
 
+    def test_successful_csv_evidence_upload(self):
+        """Verify valid CSV file upload, MIME detection, metadata and hash calculations."""
+        csv_content = b"timestamp,source_ip,event_type,user\n2026-10-27T10:00:00Z,192.168.1.50,LOGIN,admin\n"
+        response = self._upload_sample(
+            self.user_a,
+            self.case_a.id,
+            filename="network_audit_log.csv",
+            content=csv_content,
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.data
+        self.assertEqual(data["filename"], "network_audit_log.csv")
+        self.assertEqual(data["size"], len(csv_content))
+        self.assertEqual(data["hashes"]["sha256"], hashlib.sha256(csv_content).hexdigest())
+
+        evidence = Evidence.objects.get(id=data["id"])
+        self.assertEqual(evidence.file_type, "csv")
+        self.assertEqual(evidence.case_id, self.case_a.id)
+        self.assertEqual(evidence.uploaded_by, self.user_a)
+        self.assertTrue(Path(evidence.stored_path).is_file())
+
+    def test_successful_pdf_evidence_upload(self):
+        """Verify valid PDF file upload, MIME detection, metadata and hash calculations."""
+        pdf_content = (
+            b"%PDF-1.4\n"
+            b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+            b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+            b"3 0 obj<</Type/Page/MediaBox[0 0 612 792]/Parent 2 0 R>>endobj\n"
+            b"xref\n0 4\n0000000000 65535 f\n"
+            b"trailer<</Size 4/Root 1 0 R>>\nstartxref\n149\n%%EOF"
+        )
+        response = self._upload_sample(
+            self.user_a,
+            self.case_a.id,
+            filename="confidential_report.pdf",
+            content=pdf_content,
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.data
+        self.assertEqual(data["filename"], "confidential_report.pdf")
+        self.assertEqual(data["size"], len(pdf_content))
+        self.assertEqual(data["hashes"]["sha256"], hashlib.sha256(pdf_content).hexdigest())
+
+        evidence = Evidence.objects.get(id=data["id"])
+        self.assertEqual(evidence.file_type, "pdf")
+        self.assertEqual(evidence.case_id, self.case_a.id)
+        self.assertEqual(evidence.uploaded_by, self.user_a)
+        self.assertTrue(Path(evidence.stored_path).is_file())
+
+    def test_upload_missing_file_payload(self):
+        """Verify 400 Bad Request when file field is omitted from multipart payload."""
+        self.client.force_authenticate(user=self.user_a)
+        response = self.client.post(
+            f"/api/cases/{self.case_a.id}/evidence/",
+            {},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("file", response.data)
+
+    def test_upload_invalid_case_id(self):
+        """Verify 404 Not Found when case does not exist."""
+        self.client.force_authenticate(user=self.user_a)
+        upload_file = SimpleUploadedFile(
+            name="test.csv",
+            content=b"col1,col2\nval1,val2\n",
+            content_type="text/csv",
+        )
+        response = self.client.post(
+            "/api/cases/999999/evidence/",
+            {"file": upload_file},
+            format="multipart",
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
     def test_rollback_and_orphan_cleanup_on_database_failure(self):
         with patch("apps.evidence.services.Evidence.objects.create", side_effect=RuntimeError("Database failure")):
             with self.assertRaises(RuntimeError):

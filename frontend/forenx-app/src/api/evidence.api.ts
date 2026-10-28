@@ -141,7 +141,7 @@ export async function uploadEvidenceForCase(
   form.append("file", file)
 
   const { data } = await apiClient.post(`/cases/${caseId}/evidence/`, form, {
-    headers: { "Content-Type": "multipart/form-data" },
+    headers: { "Content-Type": undefined },
     onUploadProgress: (event) => {
       if (event.total && onProgress) {
         onProgress(Math.round((event.loaded * 100) / event.total))
