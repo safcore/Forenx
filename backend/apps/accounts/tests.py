@@ -1,5 +1,6 @@
 """Authentication and registration tests."""
 
+from unittest.mock import patch
 from django.contrib.auth import get_user_model
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -122,6 +123,84 @@ class RegisterValidationAPITests(APITestCase):
         self.assertIn("email", response.data)
         self.assertFalse(User.objects.filter(username="second_user").exists())
 
+    def test_rejection_of_duplicate_username(self):
+        self.client.post(
+            "/api/register/",
+            {
+                "username": "taken_username",
+                "email": "user1@example.com",
+                "password": "ValidPassword123!",
+            },
+            format="json",
+        )
+        response = self.client.post(
+            "/api/register/",
+            {
+                "username": "taken_username",
+                "email": "user2@example.com",
+                "password": "ValidPassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("username", response.data)
+        self.assertIn("A user with that username already exists.", str(response.data["username"]))
+
+    def test_common_available_username_succeeds(self):
+        response = self.client.post(
+            "/api/register/",
+            {
+                "username": "krishamange",
+                "email": "krishamange_test@example.com",
+                "password": "ValidPassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertTrue(User.objects.filter(username="krishamange").exists())
+
+    def test_rejection_of_password_too_similar_to_username(self):
+        response = self.client.post(
+            "/api/register/",
+            {
+                "username": "investigator_alice",
+                "email": "alice@example.com",
+                "password": "investigator_alice123!",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", response.data)
+        self.assertIn("The password is too similar to the username.", str(response.data["password"]))
+
+    def test_rejection_of_common_password(self):
+        response = self.client.post(
+            "/api/register/",
+            {
+                "username": "common_pwd_user",
+                "email": "commonpwd@example.com",
+                "password": "password",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", response.data)
+        self.assertIn("This password is too common.", str(response.data["password"]))
+
+    def test_rejection_of_entirely_numeric_password(self):
+        response = self.client.post(
+            "/api/register/",
+            {
+                "username": "numeric_pwd_user",
+                "email": "numericpwd@example.com",
+                "password": "1234567890",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("password", response.data)
+        self.assertIn("This password is entirely numeric.", str(response.data["password"]))
+
 
 class JWTLoginAPITests(APITestCase):
     def setUp(self):
@@ -144,6 +223,10 @@ class JWTLoginAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
+        self.assertIn("user", response.data)
+        self.assertEqual(response.data["user"]["email"], "john@forenx.io")
+        self.assertEqual(response.data["user"]["username"], "investigator_john")
+        self.assertEqual(response.data["user"]["role"], "INVESTIGATOR")
 
     def test_successful_login_with_email_and_password(self):
         response = self.client.post(
@@ -157,6 +240,10 @@ class JWTLoginAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
+        self.assertIn("user", response.data)
+        self.assertEqual(response.data["user"]["email"], "john@forenx.io")
+        self.assertEqual(response.data["user"]["username"], "investigator_john")
+        self.assertEqual(response.data["user"]["role"], "INVESTIGATOR")
 
     def test_successful_login_with_email_in_username_field(self):
         response = self.client.post(
@@ -170,6 +257,10 @@ class JWTLoginAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
+        self.assertIn("user", response.data)
+        self.assertEqual(response.data["user"]["email"], "john@forenx.io")
+        self.assertEqual(response.data["user"]["username"], "investigator_john")
+        self.assertEqual(response.data["user"]["role"], "INVESTIGATOR")
 
     def test_successful_login_via_auth_login_endpoint(self):
         response = self.client.post(
@@ -183,6 +274,10 @@ class JWTLoginAPITests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("access", response.data)
         self.assertIn("refresh", response.data)
+        self.assertIn("user", response.data)
+        self.assertEqual(response.data["user"]["email"], "john@forenx.io")
+        self.assertEqual(response.data["user"]["username"], "investigator_john")
+        self.assertEqual(response.data["user"]["role"], "INVESTIGATOR")
 
     def test_login_rejects_incorrect_password(self):
         response = self.client.post(
@@ -331,6 +426,89 @@ class EmailVerificationAPITests(APITestCase):
             format="json",
         )
         self.assertEqual(resend_verified.status_code, status.HTTP_400_BAD_REQUEST)
+
+    @patch("apps.accounts.serializers.send_verification_email", return_value=False)
+    def test_registration_fails_and_rolls_back_when_email_sending_fails(self, mock_send):
+        response = self.client.post(
+            "/api/auth/register/",
+            {
+                "username": "smtp_fail_user",
+                "email": "smtpfail@agency.gov",
+                "password": "StrongPassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("email", response.data)
+        self.assertIn("Unable to deliver verification email", str(response.data["email"]))
+        self.assertFalse(User.objects.filter(username="smtp_fail_user").exists())
+
+    @patch("apps.accounts.views.send_verification_email", return_value=False)
+    def test_resend_verification_returns_500_when_email_sending_fails(self, mock_send):
+        User.objects.create_user(
+            username="resend_fail_user",
+            email="resendfail@agency.gov",
+            password="StrongPassword123!",
+            is_email_verified=False,
+        )
+        response = self.client.post(
+            "/api/auth/resend-verification/",
+            {"email": "resendfail@agency.gov"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
+        self.assertIn("Failed to send verification email", str(response.data.get("error", "")))
+
+    @patch("apps.accounts.serializers.create_verification_token", side_effect=RuntimeError("Token generation failed"))
+    def test_registration_atomic_rollback_on_token_creation_failure(self, mock_token):
+        with self.assertRaises(RuntimeError):
+            self.client.post(
+                "/api/auth/register/",
+                {
+                    "username": "atomic_token_fail_user",
+                    "email": "tokenfail@agency.gov",
+                    "password": "StrongPassword123!",
+                },
+                format="json",
+            )
+        self.assertFalse(User.objects.filter(username="atomic_token_fail_user").exists())
+
+    @patch("apps.accounts.serializers.send_verification_email", return_value=False)
+    @patch("django.contrib.auth.models.AbstractUser.delete", side_effect=Exception("Database lock error"))
+    def test_registration_cleanup_failure_leaves_account_unverified_and_recoverable(self, mock_delete, mock_send):
+        mail.outbox.clear()
+        response = self.client.post(
+            "/api/auth/register/",
+            {
+                "username": "cleanup_fail_user",
+                "email": "cleanupfail@agency.gov",
+                "password": "StrongPassword123!",
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Unable to deliver verification email", str(response.data.get("email", "")))
+
+        # Account remains unverified and secure
+        user = User.objects.get(username="cleanup_fail_user")
+        self.assertFalse(user.is_email_verified)
+
+        # Login is rejected
+        login_res = self.client.post(
+            "/api/auth/login/",
+            {"email": "cleanupfail@agency.gov", "password": "StrongPassword123!"},
+            format="json",
+        )
+        self.assertEqual(login_res.status_code, status.HTTP_401_UNAUTHORIZED)
+
+        # Recovers cleanly through resend verification
+        resend_res = self.client.post(
+            "/api/auth/resend-verification/",
+            {"email": "cleanupfail@agency.gov"},
+            format="json",
+        )
+        self.assertEqual(resend_res.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
 
 
 class AdminUserManagementAPITests(APITestCase):

@@ -267,8 +267,8 @@ class TestPromptBuilder:
         first = build_prompt(ctx, task="summarize")
         second = build_prompt(ctx, task="summarize")
         assert first == second
-        assert "assisting a forensic analyst" in first.lower()
-        assert "Do not invent evidence" in first
+        assert "ai-assisted digital forensic investigation advisor" in first.lower()
+        assert "Never invent evidence" in first
         assert SYSTEM_INSTRUCTIONS.strip() in first
         assert data["sha256"] in first
 

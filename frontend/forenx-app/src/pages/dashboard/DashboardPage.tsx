@@ -91,17 +91,62 @@ function analysisTypeLabel(type: string): string {
   return map[type.toLowerCase()] ?? type.toUpperCase()
 }
 
+function DashboardSkeleton() {
+  return (
+    <div className="space-y-8 animate-pulse">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-2">
+          <div className="h-8 w-44 rounded-lg bg-white/10" />
+          <div className="h-4 w-96 max-w-full rounded bg-white/5" />
+        </div>
+        <div className="h-10 w-28 rounded-xl bg-white/10" />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="glass-card rounded-2xl p-5 space-y-3">
+            <div className="h-10 w-10 rounded-xl bg-white/10" />
+            <div className="h-7 w-16 rounded bg-white/10" />
+            <div className="h-3 w-20 rounded bg-white/5" />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="glass-card rounded-2xl p-6 lg:col-span-2 space-y-4">
+          <div className="flex justify-between items-center">
+            <div className="h-6 w-32 rounded bg-white/10" />
+            <div className="h-4 w-16 rounded bg-white/5" />
+          </div>
+          <div className="space-y-3 pt-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-14 rounded-xl bg-white/5" />
+            ))}
+          </div>
+        </div>
+
+        <div className="glass-card rounded-2xl p-6 space-y-4">
+          <div className="h-6 w-32 rounded bg-white/10" />
+          <div className="flex justify-center py-6">
+            <div className="h-40 w-40 rounded-full bg-white/5" />
+          </div>
+          <div className="grid grid-cols-2 gap-2 pt-2">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="h-4 rounded bg-white/5" />
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function DashboardPage() {
   const { data, isLoading, isError, error, refetch, isFetching } =
     useDashboardQuery()
 
   if (isLoading) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center gap-2 text-sm text-text-muted">
-        <Loader2 className="h-4 w-4 animate-spin" />
-        Loading dashboard…
-      </div>
-    )
+    return <DashboardSkeleton />
   }
 
   if (isError || !data) {

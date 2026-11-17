@@ -8,6 +8,7 @@ from unittest.mock import MagicMock, patch
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -1180,3 +1181,72 @@ class CustodyGlobalVerifyAPITests(SupabaseStorageIntegrationTests):
         post_res = self.client.post("/api/custody/verify/", {"case_id": self.case.id}, format="json")
         self.assertEqual(post_res.status_code, status.HTTP_200_OK)
         self.assertTrue(post_res.data["data"]["valid"])
+
+
+class AdminEvidenceAccessAndBrowserAnalysisAPITests(APITestCase):
+    def setUp(self):
+        self.investigator = User.objects.create_user(
+            username="test_investigator",
+            email="investigator@forenx.io",
+            password="InvestPass123!",
+            role="INVESTIGATOR",
+            is_email_verified=True,
+        )
+        self.admin = User.objects.create_user(
+            username="test_admin",
+            email="admin@forenx.io",
+            password="AdminPass123!",
+            role="ADMIN",
+            is_email_verified=True,
+        )
+        self.case = Case.objects.create(
+            title="Investigator Private Case",
+            description="Testing investigator isolation and admin oversight",
+            investigator=self.investigator,
+        )
+        self.temp_file = tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False)
+        self.temp_file.write(b"SAMPLE EXCEL BINARY CONTENT FOR FORENSIC TEST")
+        self.temp_file.flush()
+        self.temp_file.close()
+
+        self.evidence = Evidence.objects.create(
+            case=self.case,
+            original_filename="sample_financials.xlsx",
+            stored_path=self.temp_file.name,
+            file_size=1024,
+            mime_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            md5="d41d8cd98f00b204e9800998ecf8427e",
+            sha1="da39a3ee5e6b4b0d3255bfef95601890afd80709",
+            sha256="e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            acquisition_timestamp=timezone.now(),
+            uploaded_by=self.investigator,
+        )
+
+    def tearDown(self):
+        Path(self.temp_file.name).unlink(missing_ok=True)
+
+    def test_admin_can_access_evidence_of_other_investigator(self):
+        self.client.force_authenticate(user=self.admin)
+        res = self.client.get(f"/api/evidence/{self.evidence.id}/")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        self.assertEqual(res.data["original_filename"], "sample_financials.xlsx")
+
+    def test_investigator_cannot_access_other_investigator_evidence(self):
+        other_investigator = User.objects.create_user(
+            username="other_investigator",
+            email="other@forenx.io",
+            password="OtherPass123!",
+            role="INVESTIGATOR",
+            is_email_verified=True,
+        )
+        self.client.force_authenticate(user=other_investigator)
+        res = self.client.get(f"/api/evidence/{self.evidence.id}/")
+        self.assertEqual(res.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_browser_analysis_on_non_browser_file_returns_informative_message(self):
+        self.client.force_authenticate(user=self.investigator)
+        res = self.client.post(f"/api/evidence/{self.evidence.id}/browser/analyze/")
+        self.assertEqual(res.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("detail", res.data)
+        self.assertIn("Browser artifact analysis is only supported for Chromium", str(res.data["detail"]))
+        self.assertIn("Excel spreadsheets, documents, media, and generic files", str(res.data["detail"]))

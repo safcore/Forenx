@@ -1,7 +1,9 @@
+import logging
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import update_last_login
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import exceptions, serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from rest_framework_simplejwt.settings import api_settings
@@ -12,6 +14,7 @@ from .utils import (
     send_verification_email,
 )
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 
@@ -56,19 +59,54 @@ class RegisterSerializer(serializers.ModelSerializer):
         return attrs
 
     def create(self, validated_data):
-        user = User.objects.create_user(
-            username=validated_data["username"],
-            email=validated_data["email"],
-            password=validated_data["password"],
-            first_name=validated_data.get("first_name", ""),
-            last_name=validated_data.get("last_name", ""),
-            phone=validated_data.get("phone"),
-            role="INVESTIGATOR",
-            is_email_verified=False,
-        )
-        token_obj = create_verification_token(user)
-        send_verification_email(user, token_obj)
+        with transaction.atomic():
+            user = User.objects.create_user(
+                username=validated_data["username"],
+                email=validated_data["email"],
+                password=validated_data["password"],
+                first_name=validated_data.get("first_name", ""),
+                last_name=validated_data.get("last_name", ""),
+                phone=validated_data.get("phone"),
+                role="INVESTIGATOR",
+                is_email_verified=False,
+            )
+            token_obj = create_verification_token(user)
+
+        # Database transaction is committed.
+        # We deliberately do not hold a database transaction open during external SMTP network calls.
+        email_sent = send_verification_email(user, token_obj)
+        if not email_sent:
+            try:
+                user.delete()
+            except Exception as delete_exc:
+                logger.error(
+                    "Failed to clean up unverified user %s after email failure: %s",
+                    user.id,
+                    delete_exc,
+                )
+            raise serializers.ValidationError(
+                {"email": "Unable to deliver verification email. Please verify your email address or try again later."}
+            )
         return user
+
+
+class ProfileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = [
+            "id",
+            "username",
+            "email",
+            "first_name",
+            "last_name",
+            "phone",
+            "role",
+            "is_active",
+            "is_email_verified",
+            "created_at",
+            "date_joined",
+            "last_login",
+        ]
 
 
 class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -124,31 +162,13 @@ class EmailOrUsernameTokenObtainPairSerializer(TokenObtainPairSerializer):
         data = {
             "refresh": str(refresh),
             "access": str(refresh.access_token),
+            "user": ProfileSerializer(self.user).data,
         }
 
         if api_settings.UPDATE_LAST_LOGIN:
             update_last_login(None, self.user)
 
         return data
-
-
-class ProfileSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = User
-        fields = [
-            "id",
-            "username",
-            "email",
-            "first_name",
-            "last_name",
-            "phone",
-            "role",
-            "is_active",
-            "is_email_verified",
-            "created_at",
-            "date_joined",
-            "last_login",
-        ]
 
 
 class AdminUserSerializer(serializers.ModelSerializer):

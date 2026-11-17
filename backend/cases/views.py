@@ -23,9 +23,9 @@ class CaseListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         # Admin can view all cases if permitted; investigators strictly view their own
         if getattr(self.request.user, "role", None) == "ADMIN" or self.request.user.is_superuser:
-            queryset = Case.objects.all().order_by("-created_at")
+            queryset = Case.objects.select_related("investigator").all().order_by("-created_at")
         else:
-            queryset = Case.objects.filter(investigator=self.request.user).order_by("-created_at")
+            queryset = Case.objects.select_related("investigator").filter(investigator=self.request.user).order_by("-created_at")
 
         status_param = self.request.query_params.get("status")
         if status_param:
@@ -59,8 +59,8 @@ class CaseDetailView(generics.RetrieveUpdateDestroyAPIView):
 
     def get_queryset(self):
         if getattr(self.request.user, "role", None) == "ADMIN" or self.request.user.is_superuser:
-            return Case.objects.all()
-        return Case.objects.filter(investigator=self.request.user)
+            return Case.objects.select_related("investigator").all()
+        return Case.objects.select_related("investigator").filter(investigator=self.request.user)
 
 
 class CaseCloseView(APIView):

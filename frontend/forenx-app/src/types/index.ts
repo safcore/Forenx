@@ -554,6 +554,7 @@ export interface DashboardStats {
 export interface AuthTokens {
   access: string
   refresh: string
+  user?: User
 }
 
 export interface RegisterPayload {

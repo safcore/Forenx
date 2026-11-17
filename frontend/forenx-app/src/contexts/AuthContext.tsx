@@ -121,12 +121,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [user, logout])
 
+  // Synchronize authentication and activity state across multiple browser tabs
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "forenx_tokens") {
+        if (!e.newValue) {
+          // Tokens removed in another tab -> sync logout immediately
+          setUser(null)
+          clearStoredLastActivity()
+        } else {
+          // Tokens updated in another tab -> sync user / refresh
+          try {
+            const parsed = JSON.parse(e.newValue) as AuthTokens
+            if (parsed.user) {
+              setUser(parsed.user)
+            } else {
+              refreshProfile().catch(() => {})
+            }
+          } catch {
+            // ignore JSON parse error
+          }
+        }
+      } else if (e.key === ACTIVITY_STORAGE_KEY) {
+        if (e.newValue) {
+          const timestamp = parseInt(e.newValue, 10)
+          if (!Number.isNaN(timestamp)) {
+            lastRecordedActivityRef.current = timestamp
+          }
+        }
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+    return () => window.removeEventListener("storage", handleStorageChange)
+  }, [refreshProfile])
+
   const login = async (email: string, password: string) => {
     const tokens: AuthTokens = await authService.login(email, password)
     authService.saveTokens(tokens)
     updateStoredLastActivity()
     lastRecordedActivityRef.current = Date.now()
-    await refreshProfile()
+    if (tokens.user) {
+      setUser(tokens.user)
+      // Background profile refresh to keep in sync without blocking login navigation
+      refreshProfile().catch(() => {})
+    } else {
+      await refreshProfile()
+    }
   }
 
   return (

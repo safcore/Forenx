@@ -39,6 +39,28 @@ from .services import (
 )
 
 
+def _is_admin_user(user) -> bool:
+    return bool(user and (getattr(user, "role", None) == "ADMIN" or user.is_superuser))
+
+
+def _get_accessible_case(request, case_id: int) -> Case:
+    if _is_admin_user(request.user):
+        return get_object_or_404(Case, id=case_id)
+    return get_object_or_404(Case, id=case_id, investigator=request.user)
+
+
+def _get_accessible_evidence(request, evidence_id) -> Evidence:
+    if _is_admin_user(request.user):
+        return get_object_or_404(Evidence, id=evidence_id)
+    return get_object_or_404(Evidence, id=evidence_id, case__investigator=request.user)
+
+
+def _get_accessible_report(request, report_id) -> ReportRecord:
+    if _is_admin_user(request.user):
+        return get_object_or_404(ReportRecord, id=report_id)
+    return get_object_or_404(ReportRecord, id=report_id, case__investigator=request.user)
+
+
 class CaseEvidenceCollectionView(APIView):
     """GET list and POST upload/acquisition for a specific case's evidence."""
 
@@ -46,7 +68,7 @@ class CaseEvidenceCollectionView(APIView):
     parser_classes = [MultiPartParser, FormParser]
 
     def get(self, request, case_id: int):
-        case = get_object_or_404(Case, id=case_id, investigator=request.user)
+        case = _get_accessible_case(request, case_id)
         evidence_qs = (
             Evidence.objects.filter(case=case)
             .select_related("case", "uploaded_by")
@@ -56,7 +78,7 @@ class CaseEvidenceCollectionView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request, case_id: int):
-        case = get_object_or_404(Case, id=case_id, investigator=request.user)
+        case = _get_accessible_case(request, case_id)
         serializer = EvidenceUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -75,6 +97,12 @@ class EvidenceListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        if _is_admin_user(self.request.user):
+            return (
+                Evidence.objects.all()
+                .select_related("case", "uploaded_by")
+                .order_by("-created_at")
+            )
         return (
             Evidence.objects.filter(case__investigator=self.request.user)
             .select_related("case", "uploaded_by")
@@ -90,6 +118,8 @@ class EvidenceDetailView(generics.RetrieveAPIView):
     lookup_field = "id"
 
     def get_queryset(self):
+        if _is_admin_user(self.request.user):
+            return Evidence.objects.all().select_related("case", "uploaded_by")
         return Evidence.objects.filter(
             case__investigator=self.request.user
         ).select_related("case", "uploaded_by")
@@ -101,9 +131,7 @@ class EvidenceCustodyView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         events = evidence.custody_events.order_by("timestamp", "created_at")
         serializer = CustodyEventSerializer(events, many=True)
         return Response(
@@ -122,9 +150,7 @@ class EvidenceCustodyVerifyView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         service = hydrate_custody_service(evidence)
         verification = service.verify_chain(str(evidence.id))
         return Response(
@@ -139,9 +165,7 @@ class EvidenceVerifyHashView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         serializer = HashVerifyRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -159,9 +183,7 @@ class EvidenceVerifyIntegrityView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         payload = verify_evidence_integrity(evidence=evidence, request=request)
         return Response(payload, status=status.HTTP_200_OK)
 
@@ -281,9 +303,7 @@ class EvidenceMetadataAnalyzeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         payload = run_metadata_analysis(evidence=evidence, request=request)
         return Response(
             {"success": True, "data": payload},
@@ -297,9 +317,7 @@ class EvidenceMetadataView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         payload = get_latest_metadata_analysis(evidence=evidence)
         return Response(
             {"success": True, "data": payload},
@@ -313,9 +331,7 @@ class EvidenceKeywordView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         serializer = KeywordSearchRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -340,9 +356,7 @@ class EvidenceBrowserAnalyzeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         payload = run_browser_analysis(evidence=evidence, request=request)
         return Response(
             {"success": True, "data": payload},
@@ -356,9 +370,7 @@ class EvidenceBrowserView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         payload = get_latest_browser_analysis(evidence=evidence)
         return Response(
             {"success": True, "data": payload},
@@ -372,9 +384,7 @@ class EvidenceTimelineAnalyzeView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         payload = run_timeline_analysis(evidence=evidence, request=request)
         return Response(
             {"success": True, "data": payload},
@@ -388,9 +398,7 @@ class EvidenceTimelineView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         payload = get_latest_timeline_analysis(evidence=evidence)
         return Response(
             {"success": True, "data": payload},
@@ -404,9 +412,7 @@ class EvidenceReportView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         serializer = ReportCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -432,9 +438,7 @@ class ReportDownloadView(APIView):
         return (renderers[0], renderers[0].media_type)
 
     def get(self, request, id):
-        record = get_object_or_404(
-            ReportRecord, id=id, case__investigator=request.user
-        )
+        record = _get_accessible_report(request, id)
         prefer = request.query_params.get("format", "pdf").lower()
         file_path = safe_report_download_path(record, prefer=prefer)
 
@@ -451,6 +455,12 @@ class ReportListView(generics.ListAPIView):
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
+        if _is_admin_user(self.request.user):
+            return (
+                ReportRecord.objects.all()
+                .select_related("case", "evidence", "generated_by")
+                .order_by("-created_at")
+            )
         return (
             ReportRecord.objects.filter(case__investigator=self.request.user)
             .select_related("case", "evidence", "generated_by")
@@ -468,9 +478,7 @@ class EvidenceAIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         serializer = AIAssistRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
@@ -491,9 +499,7 @@ class EvidenceAnalysisHistoryView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, id):
-        evidence = get_object_or_404(
-            Evidence, id=id, case__investigator=request.user
-        )
+        evidence = _get_accessible_evidence(request, id)
         runs = list_evidence_analysis_runs(evidence=evidence)
         return Response(
             {"success": True, "data": runs},

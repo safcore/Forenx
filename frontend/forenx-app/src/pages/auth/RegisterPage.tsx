@@ -7,7 +7,7 @@ import { motion } from "framer-motion"
 import { Shield, Eye, EyeOff, Loader2, ArrowRight, AlertCircle } from "lucide-react"
 import { toast } from "react-hot-toast"
 import * as authService from "@/services/auth"
-import { getErrorMessage } from "@/api/client"
+import { getErrorMessage, getFieldErrors } from "@/api/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
@@ -37,9 +37,11 @@ export default function RegisterPage() {
   const {
     register,
     handleSubmit,
+    setError,
     formState: { errors },
   } = useForm<RegisterFormData>({
     resolver: zodResolver(registerSchema),
+    mode: "onChange",
     defaultValues: {
       first_name: "",
       last_name: "",
@@ -70,9 +72,78 @@ export default function RegisterPage() {
       )
       navigate("/verify-email")
     } catch (err) {
-      const msg = getErrorMessage(err)
-      setApiError(msg)
-      toast.error(msg)
+      const fieldErrors = getFieldErrors(err)
+      let hasFieldErrors = false
+
+      if (fieldErrors.username?.length) {
+        hasFieldErrors = true
+        const text = fieldErrors.username.join(" ")
+        const message = /already exists|already taken/i.test(text)
+          ? "This username is already taken. Please choose another username."
+          : fieldErrors.username[0]
+        setError("username", { type: "server", message })
+      }
+
+      if (fieldErrors.email?.length) {
+        hasFieldErrors = true
+        const text = fieldErrors.email.join(" ")
+        const message = /already exists|already registered/i.test(text)
+          ? "This email address is already registered. Please sign in or use another email."
+          : fieldErrors.email[0]
+        setError("email", { type: "server", message })
+      }
+
+      if (fieldErrors.password?.length) {
+        hasFieldErrors = true
+        const mappedErrors = fieldErrors.password.map((msg) => {
+          if (/too similar/i.test(msg)) {
+            return "Your password is too similar to your username. Please choose a different password."
+          }
+          if (/too common/i.test(msg)) {
+            return "This password is too common. Please choose a less predictable password."
+          }
+          if (/entirely numeric/i.test(msg)) {
+            return "Your password cannot contain only numbers. Include letters and symbols."
+          }
+          if (/too short|at least/i.test(msg)) {
+            return "This password is too short. It must contain at least 8 characters."
+          }
+          return msg
+        })
+        setError("password", {
+          type: "server",
+          message: mappedErrors.join("\n"),
+        })
+      }
+
+      if (fieldErrors.first_name?.length) {
+        hasFieldErrors = true
+        setError("first_name", { type: "server", message: fieldErrors.first_name[0] })
+      }
+
+      if (fieldErrors.last_name?.length) {
+        hasFieldErrors = true
+        setError("last_name", { type: "server", message: fieldErrors.last_name[0] })
+      }
+
+      if (fieldErrors.phone?.length) {
+        hasFieldErrors = true
+        setError("phone", { type: "server", message: fieldErrors.phone[0] })
+      }
+
+      if (fieldErrors.department?.length) {
+        hasFieldErrors = true
+        setError("department", { type: "server", message: fieldErrors.department[0] })
+      }
+
+      if (hasFieldErrors) {
+        setApiError(null)
+        toast.error("Please correct the highlighted errors.")
+      } else {
+        const msg = getErrorMessage(err)
+        setApiError(msg)
+        toast.error(msg)
+      }
     } finally {
       setIsLoading(false)
     }

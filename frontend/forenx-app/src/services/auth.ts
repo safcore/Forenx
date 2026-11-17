@@ -76,18 +76,26 @@ export async function login(
 ): Promise<AuthTokens> {
   if (DEMO_MODE) {
     if (email && password.length >= 6) {
-      return { access: "demo-access-token", refresh: "demo-refresh-token" }
+      return {
+        access: "demo-access-token",
+        refresh: "demo-refresh-token",
+        user: DEMO_USER,
+      }
     }
     throw new Error("Invalid credentials")
   }
 
   const { data } = await apiClient.post("/auth/login/", { email, password })
-  // Integrated backend returns SimpleJWT { access, refresh }
+  // Integrated backend returns SimpleJWT { access, refresh, user }
+  const user =
+    data?.user && typeof data.user === "object"
+      ? normalizeUser(data.user as Record<string, unknown>)
+      : undefined
   if (data?.access && data?.refresh) {
-    return { access: data.access, refresh: data.refresh }
+    return { access: data.access, refresh: data.refresh, user }
   }
   if (data?.tokens?.access && data?.tokens?.refresh) {
-    return data.tokens as AuthTokens
+    return { ...(data.tokens as AuthTokens), user }
   }
   throw new Error("Login response did not include access and refresh tokens")
 }

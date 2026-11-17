@@ -159,7 +159,11 @@ export default function LoginPage() {
                 type="email"
                 placeholder="investigator@agency.gov"
                 error={errors.email?.message}
-                {...register("email")}
+                {...register("email", {
+                  onChange: () => {
+                    if (unverifiedEmail) setUnverifiedEmail(null)
+                  },
+                })}
               />
 
               <div className="relative">
@@ -168,7 +172,11 @@ export default function LoginPage() {
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
                   error={errors.password?.message}
-                  {...register("password")}
+                  {...register("password", {
+                    onChange: () => {
+                      if (unverifiedEmail) setUnverifiedEmail(null)
+                    },
+                  })}
                 />
                 <button
                   type="button"

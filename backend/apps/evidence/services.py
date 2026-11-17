@@ -53,6 +53,7 @@ _SENSITIVE_PATH_KEYS = frozenset(
 _BROWSER_PROFILE_MARKERS = frozenset(
     {
         "history",
+        "history.sqlite",
         "bookmarks",
         "cookies",
         "places.sqlite",
@@ -638,19 +639,21 @@ def _looks_like_browser_profile(directory: Path) -> bool:
 
 
 def _resolve_browser_profile_dir(path: Path) -> Path:
+    unsupported_message = (
+        "Browser artifact analysis is only supported for Chromium (Chrome, Edge) profile "
+        "directories/databases (History, Cookies, Bookmarks) and Firefox profile databases "
+        "(places.sqlite, cookies.sqlite). Excel spreadsheets, documents, media, and generic files "
+        "are not browser artifact profiles."
+    )
     if path.is_dir():
         if _looks_like_browser_profile(path):
             return path
-        raise ValidationError(
-            {"detail": "Browser artifact analysis is not supported for this evidence type."}
-        )
+        raise ValidationError({"detail": unsupported_message})
     name = path.name.lower()
     parent = path.parent
     if name in _BROWSER_PROFILE_MARKERS or _looks_like_browser_profile(parent):
         return parent
-    raise ValidationError(
-        {"detail": "Browser artifact analysis is not supported for this evidence type."}
-    )
+    raise ValidationError({"detail": unsupported_message})
 
 
 def _limit_browser_artifact_lists(payload: dict[str, Any]) -> dict[str, Any]:

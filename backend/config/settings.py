@@ -229,7 +229,7 @@ EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 _default_email_backend = (
     'django.core.mail.backends.smtp.EmailBackend'
     if EMAIL_HOST_USER
-    else 'django.core.mail.backends.console.email.Backend'
+    else 'django.core.mail.backends.console.EmailBackend'
 )
 EMAIL_BACKEND = config('EMAIL_BACKEND', default=_default_email_backend)
 EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
@@ -238,3 +238,4 @@ EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
 EMAIL_USE_SSL = config('EMAIL_USE_SSL', default=False, cast=bool)
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@forenx.local')
 FRONTEND_URL = config('FRONTEND_URL', default='http://localhost:5173')
+EMAIL_TIMEOUT = config('EMAIL_TIMEOUT', default=8, cast=int)

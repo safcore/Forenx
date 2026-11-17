@@ -100,7 +100,12 @@ class ResendVerificationView(APIView):
             )
 
         token_obj = create_verification_token(user)
-        send_verification_email(user, token_obj)
+        sent = send_verification_email(user, token_obj)
+        if not sent:
+            return Response(
+                {"error": "Failed to send verification email. Please check SMTP configuration or try again later."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
         return Response(
             {"message": "A verification email has been sent to your address."},

@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Globe, Loader2 } from "lucide-react"
+import { Globe, Loader2, AlertCircle, Info } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -61,7 +61,18 @@ export function BrowserAnalysisSection({ evidenceId }: BrowserAnalysisSectionPro
           evidence. Cookie values and credentials are never returned. This is
           separate from hash verification and keyword search.
         </p>
-
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3.5 text-xs text-text-muted space-y-1.5">
+          <div className="flex items-center gap-1.5 font-medium text-white/90">
+            <Info className="h-3.5 w-3.5 text-accent" />
+            <span>Supported Profile Formats</span>
+          </div>
+          <p className="leading-relaxed">
+            Chromium-based profiles (files or folders containing <code className="rounded bg-white/10 px-1 text-white">History</code>, <code className="rounded bg-white/10 px-1 text-white">Cookies</code>, <code className="rounded bg-white/10 px-1 text-white">Bookmarks</code>, or <code className="rounded bg-white/10 px-1 text-white">Login Data</code>) and Firefox SQLite databases (<code className="rounded bg-white/10 px-1 text-white">places.sqlite</code>, <code className="rounded bg-white/10 px-1 text-white">cookies.sqlite</code>).
+          </p>
+          <p className="text-text-secondary/70">
+            Spreadsheets (.xlsx, .csv), PDF documents, disk images, and media files are analyzed using Deep Metadata, Timeline, and Keyword Search instead.
+          </p>
+        </div>
         <Button
           className="gap-2"
           disabled={analyzeMutation.isPending}
@@ -82,9 +93,15 @@ export function BrowserAnalysisSection({ evidenceId }: BrowserAnalysisSectionPro
         </Button>
 
         {submitError ? (
-          <p className="text-sm text-danger" role="alert">
-            {submitError}
-          </p>
+          <div className="rounded-xl border border-warning/30 bg-warning/10 p-4 text-xs text-warning" role="alert">
+            <div className="flex items-start gap-2.5">
+              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-warning" />
+              <div className="space-y-1">
+                <p className="font-semibold text-white">Analysis Status</p>
+                <p className="text-text-secondary leading-relaxed whitespace-pre-line">{submitError}</p>
+              </div>
+            </div>
+          </div>
         ) : null}
 
         {result ? (

@@ -21,6 +21,20 @@ services:
         fromDatabase:
           name: forenx-db
           property: connectionString
+      - key: FRONTEND_URL
+        value: "https://forenx-azure.vercel.app"
+      - key: EMAIL_BACKEND
+        value: "django.core.mail.backends.smtp.EmailBackend"
+      - key: EMAIL_HOST
+        value: "smtp.gmail.com"
+      - key: EMAIL_PORT
+        value: "587"
+      - key: EMAIL_USE_TLS
+        value: "True"
+      - key: EMAIL_TIMEOUT
+        value: "8"
+      - key: FORENX_STORAGE_BACKEND
+        value: "supabase"
 
 databases:
   - name: forenx-db

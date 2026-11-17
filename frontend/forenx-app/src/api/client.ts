@@ -55,7 +55,11 @@ function isAuthEndpoint(url: string | undefined): boolean {
     url.includes("/token/refresh/") ||
     url.includes("/auth/register/") ||
     url.includes("/register/") ||
-    url.includes("/auth/refresh/")
+    url.includes("/auth/refresh/") ||
+    url.includes("/auth/verify-email/") ||
+    url.includes("/verify-email/") ||
+    url.includes("/auth/resend-verification/") ||
+    url.includes("/resend-verification/")
   )
 }
 
@@ -94,7 +98,14 @@ apiClient.interceptors.response.use(
       if (!tokens) {
         isRefreshing = false
         localStorage.removeItem("forenx_tokens")
-        window.location.href = "/login"
+        if (
+          typeof window !== "undefined" &&
+          window.location.pathname !== "/login" &&
+          window.location.pathname !== "/register" &&
+          window.location.pathname !== "/verify-email"
+        ) {
+          window.location.href = "/login"
+        }
         return Promise.reject(error)
       }
 
@@ -115,7 +126,14 @@ apiClient.interceptors.response.use(
       } catch (refreshError) {
         processQueue(refreshError, null)
         localStorage.removeItem("forenx_tokens")
-        window.location.href = "/login"
+        if (
+          typeof window !== "undefined" &&
+          window.location.pathname !== "/login" &&
+          window.location.pathname !== "/register" &&
+          window.location.pathname !== "/verify-email"
+        ) {
+          window.location.href = "/login"
+        }
         return Promise.reject(refreshError)
       } finally {
         isRefreshing = false
@@ -143,6 +161,29 @@ function firstMessage(value: unknown): string | null {
   return null
 }
 
+export function getFieldErrors(error: unknown): Record<string, string[]> {
+  if (axios.isAxiosError(error)) {
+    const rawData = error.response?.data
+    if (
+      rawData &&
+      typeof rawData === "object" &&
+      !(typeof Blob !== "undefined" && rawData instanceof Blob)
+    ) {
+      const data = rawData as Record<string, unknown>
+      const result: Record<string, string[]> = {}
+      for (const [key, value] of Object.entries(data)) {
+        if (Array.isArray(value)) {
+          result[key] = value.map(String)
+        } else if (typeof value === "string") {
+          result[key] = [value]
+        }
+      }
+      return result
+    }
+  }
+  return {}
+}
+
 export function getErrorMessage(error: unknown): string {
   if (axios.isAxiosError(error)) {
     const status = error.response?.status
@@ -161,7 +202,8 @@ export function getErrorMessage(error: unknown): string {
       fieldDetail ||
       firstMessage(data?.error) ||
       firstMessage(data?.detail) ||
-      firstMessage(data?.message)
+      firstMessage(data?.message) ||
+      firstMessage(data)
 
     if (
       code === "EVIDENCE_FILE_MISSING" ||
@@ -171,14 +213,11 @@ export function getErrorMessage(error: unknown): string {
       return "Evidence file is currently unavailable for this operation."
     }
 
-    if (status === 401) {
-      return "Your session has expired. Please sign in again."
-    }
-    if (status === 403) {
-      return "You do not have permission to perform this action."
-    }
-    if (status === 404) {
-      return "The requested resource could not be found."
+    if (
+      fromEnvelope &&
+      /no active account found/i.test(fromEnvelope)
+    ) {
+      return "Invalid email, username or password. Please try again."
     }
 
     if (fromEnvelope && fromEnvelope !== "Validation failed") {
@@ -189,6 +228,19 @@ export function getErrorMessage(error: unknown): string {
       return fromEnvelope
     }
     if (fieldDetail) return fieldDetail
+
+    if (status === 401) {
+      return "Invalid email, username or password. Please try again."
+    }
+    if (status === 403) {
+      return "You do not have permission to perform this action."
+    }
+    if (status === 404) {
+      return "The requested resource could not be found."
+    }
+    if (status === 400) {
+      return "Invalid input. Please check the highlighted fields."
+    }
     if (status === 413) return "The file exceeds the permitted upload size."
     if (status === 429) return "Too many requests. Please try again later."
     if (status && status >= 500) return "Something went wrong. Please try again."
@@ -199,6 +251,9 @@ export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     if (/traceback|file:\/\/|[A-Za-z]:\\/i.test(error.message)) {
       return "Something went wrong. Please try again."
+    }
+    if (/request failed with status code/i.test(error.message)) {
+      return "Invalid input. Please check the highlighted fields."
     }
     return error.message
   }
